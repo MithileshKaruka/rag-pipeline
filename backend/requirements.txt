@@ -1,0 +1,17 @@
+# Core Framework
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.18
+
+# RAG Components
+chromadb==0.5.23
+langchain==0.3.13
+langchain-community==0.3.13
+
+# Ollama Integration
+ollama==0.4.5
+
+# Utilities
+python-dotenv==1.0.1
+pydantic==2.10.5
+httpx==0.28.1
