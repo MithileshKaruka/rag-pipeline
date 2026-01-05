@@ -102,45 +102,27 @@ def create_ingest_router(chroma_client):
             logger.error(f"Error creating collection via API: {e}")
             raise
 
-    async def add_documents_direct(collection_name: str, documents: list, metadatas: list, ids: list):
+    async def add_documents_with_client(collection_name: str, documents: list, metadatas: list, ids: list):
         """
-        Add documents to a collection via direct API call.
-        Bypasses the buggy client deserialization.
-
-        Note: ChromaDB v2 API requires collection UUID in the endpoint path.
-        Empty embeddings array [] triggers automatic embedding generation.
+        Add documents using ChromaDB client's add method.
+        The client handles embedding generation automatically.
+        We use get_or_create_collection to avoid deserialization of get_collection.
         """
         try:
-            # Get collection UUID from name
-            collection_id = await get_collection_id(collection_name)
-            if not collection_id:
-                raise ValueError(f"Collection '{collection_name}' not found")
+            # Use get_or_create_collection which has fewer deserialization issues
+            collection = chroma_client.get_or_create_collection(name=collection_name)
 
-            chroma_host = os.getenv("CHROMA_HOST", "localhost")
-            chroma_port = os.getenv("CHROMA_PORT", "8001")
-            # v2 API requires collection UUID, not name
-            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_id}/add"
+            # Call add() - the client will auto-generate embeddings
+            collection.add(
+                ids=ids,
+                documents=documents,
+                metadatas=metadatas
+            )
 
-            # ChromaDB v2 API format
-            # Provide None for each embedding to trigger auto-generation
-            # Must match the count of documents
-            payload = {
-                "ids": ids,
-                "embeddings": [None] * len(documents),  # None for each doc = auto-generate
-                "documents": documents,
-                "metadatas": metadatas
-            }
-
-            async with httpx.AsyncClient(timeout=60.0) as http_client:
-                response = await http_client.post(url, json=payload)
-                response.raise_for_status()
-                return response.json()
-        except httpx.HTTPStatusError as e:
-            logger.error(f"Error adding documents via API: {e}")
-            logger.error(f"Response body: {e.response.text}")
-            raise
+            logger.info(f"Successfully added {len(documents)} documents to '{collection_name}'")
+            return {"status": "success", "count": len(documents)}
         except Exception as e:
-            logger.error(f"Error adding documents via API: {e}")
+            logger.error(f"Error adding documents with client: {e}")
             raise
 
     @router.post("/ingest/text", response_model=IngestResponse)
@@ -196,8 +178,8 @@ def create_ingest_router(chroma_client):
                 additional_metadata=request.metadata
             )
 
-            # Add documents to collection via direct API call
-            await add_documents_direct(
+            # Add documents using client method (handles embedding generation)
+            await add_documents_with_client(
                 collection_name=request.collection_name,
                 documents=chunks,
                 metadatas=metadatas,
@@ -302,8 +284,8 @@ def create_ingest_router(chroma_client):
                 file_type=file_extension
             )
 
-            # Add documents to collection via direct API call
-            await add_documents_direct(
+            # Add documents using client method (handles embedding generation)
+            await add_documents_with_client(
                 collection_name=collection_name,
                 documents=chunks,
                 metadatas=metadatas,
