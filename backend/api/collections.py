@@ -3,6 +3,8 @@ Collection management API endpoints
 """
 
 import logging
+import httpx
+import os
 from typing import List
 from fastapi import APIRouter, HTTPException
 
@@ -27,20 +29,35 @@ def create_collections_router(chroma_client):
     async def list_collections():
         """
         List all available ChromaDB collections
+
+        Note: We bypass the ChromaDB client's list_collections() method because it has
+        a deserialization bug with the HTTP client. Instead, we call the API directly.
         """
         if not chroma_client:
             raise HTTPException(status_code=503, detail="ChromaDB client not available")
 
         try:
-            collections = chroma_client.list_collections()
-            # Handle both dict and object responses from ChromaDB client
-            collection_names = []
-            for col in collections:
-                if isinstance(col, dict):
-                    collection_names.append(col.get('name', col.get('id', str(col))))
-                else:
-                    collection_names.append(col.name if hasattr(col, 'name') else str(col))
+            # Get ChromaDB connection details from client
+            chroma_host = os.getenv("CHROMA_HOST", "localhost")
+            chroma_port = os.getenv("CHROMA_PORT", "8001")
+
+            # Call ChromaDB API directly to avoid client deserialization issues
+            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections"
+
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                collections_data = response.json()
+
+            # Extract collection names from the response
+            collection_names = [col.get("name") for col in collections_data if col.get("name")]
+
+            logger.info(f"Found {len(collection_names)} collections")
             return collection_names
+
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error listing collections: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to list collections: {str(e)}")
         except Exception as e:
             logger.error(f"Failed to list collections: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to list collections: {str(e)}")
@@ -60,14 +77,19 @@ def create_collections_router(chroma_client):
             raise HTTPException(status_code=503, detail="ChromaDB client not available")
 
         try:
-            # Check if collection already exists
-            collections = chroma_client.list_collections()
-            existing_collections = []
-            for col in collections:
-                if isinstance(col, dict):
-                    existing_collections.append(col.get('name', col.get('id', str(col))))
-                else:
-                    existing_collections.append(col.name if hasattr(col, 'name') else str(col))
+            # Get ChromaDB connection details
+            chroma_host = os.getenv("CHROMA_HOST", "localhost")
+            chroma_port = os.getenv("CHROMA_PORT", "8001")
+
+            # Check if collection already exists by calling API directly
+            list_url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections"
+
+            async with httpx.AsyncClient() as http_client:
+                response = await http_client.get(list_url)
+                response.raise_for_status()
+                collections_data = response.json()
+
+            existing_collections = [col.get("name") for col in collections_data if col.get("name")]
 
             if request.collection_name in existing_collections:
                 raise HTTPException(
