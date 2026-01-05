@@ -74,13 +74,9 @@ def create_ingest_router(chroma_client):
             raise HTTPException(status_code=503, detail="ChromaDB client not available")
 
         try:
-            # Get or create collection
-            try:
-                collection = chroma_client.get_collection(request.collection_name)
-                logger.info(f"Using existing collection: {request.collection_name}")
-            except Exception:
-                collection = chroma_client.create_collection(request.collection_name)
-                logger.info(f"Created new collection: {request.collection_name}")
+            # Get or create collection (handles both new and existing collections)
+            collection = chroma_client.get_or_create_collection(request.collection_name)
+            logger.info(f"Using collection: {request.collection_name}")
 
             # Split text into chunks using recursive strategy
             # This intelligently splits on paragraphs, then sentences, then words
@@ -170,13 +166,9 @@ def create_ingest_router(chroma_client):
             content = await file.read()
             text = content.decode("utf-8")
 
-            # Get or create collection
-            try:
-                collection = chroma_client.get_collection(collection_name)
-                logger.info(f"Using existing collection: {collection_name}")
-            except Exception:
-                collection = chroma_client.create_collection(collection_name)
-                logger.info(f"Created new collection: {collection_name}")
+            # Get or create collection (handles both new and existing collections)
+            collection = chroma_client.get_or_create_collection(collection_name)
+            logger.info(f"Using collection: {collection_name}")
 
             # Split text into chunks using appropriate strategy based on file type
             if file_extension == ".md":
