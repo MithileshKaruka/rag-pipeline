@@ -33,7 +33,14 @@ def create_collections_router(chroma_client):
 
         try:
             collections = chroma_client.list_collections()
-            return [col.name for col in collections]
+            # Handle both dict and object responses from ChromaDB client
+            collection_names = []
+            for col in collections:
+                if isinstance(col, dict):
+                    collection_names.append(col.get('name', col.get('id', str(col))))
+                else:
+                    collection_names.append(col.name if hasattr(col, 'name') else str(col))
+            return collection_names
         except Exception as e:
             logger.error(f"Failed to list collections: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to list collections: {str(e)}")
@@ -54,7 +61,14 @@ def create_collections_router(chroma_client):
 
         try:
             # Check if collection already exists
-            existing_collections = [col.name for col in chroma_client.list_collections()]
+            collections = chroma_client.list_collections()
+            existing_collections = []
+            for col in collections:
+                if isinstance(col, dict):
+                    existing_collections.append(col.get('name', col.get('id', str(col))))
+                else:
+                    existing_collections.append(col.name if hasattr(col, 'name') else str(col))
+
             if request.collection_name in existing_collections:
                 raise HTTPException(
                     status_code=400,
