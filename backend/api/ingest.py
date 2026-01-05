@@ -97,8 +97,8 @@ def create_ingest_router(chroma_client):
         Add documents to a collection via direct API call.
         Bypasses the buggy client deserialization.
 
-        Note: ChromaDB v2 API expects 'documents' field (not 'embeddings' for text).
-        The API will automatically generate embeddings from the documents.
+        Note: By omitting the 'embeddings' field, ChromaDB will automatically
+        generate embeddings from the documents using its default embedding function.
         """
         try:
             chroma_host = os.getenv("CHROMA_HOST", "localhost")
@@ -106,13 +106,11 @@ def create_ingest_router(chroma_client):
             url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_name}/add"
 
             # ChromaDB v2 API format
+            # Omit 'embeddings' field to trigger auto-generation from documents
             payload = {
                 "ids": ids,
                 "documents": documents,
-                "metadatas": metadatas,
-                "embeddings": None,  # Let ChromaDB auto-generate embeddings
-                "uris": None,
-                "increment_index": True
+                "metadatas": metadatas
             }
 
             async with httpx.AsyncClient(timeout=60.0) as http_client:
