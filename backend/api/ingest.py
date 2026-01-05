@@ -47,15 +47,14 @@ def create_ingest_router(chroma_client):
         APIRouter with ingestion endpoints
     """
 
-    async def collection_exists(collection_name: str) -> bool:
+    async def get_collection_id(collection_name: str) -> str:
         """
-        Check if a collection exists by calling ChromaDB API directly.
-        Bypasses the buggy client deserialization.
+        Get collection UUID by name via direct API call.
+        Returns collection ID if exists, None otherwise.
         """
         try:
             chroma_host = os.getenv("CHROMA_HOST", "localhost")
             chroma_port = os.getenv("CHROMA_PORT", "8001")
-            # ChromaDB 0.5.23 uses v2 API
             url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections"
 
             async with httpx.AsyncClient() as http_client:
@@ -63,11 +62,22 @@ def create_ingest_router(chroma_client):
                 response.raise_for_status()
                 collections_data = response.json()
 
-            existing_collections = [col.get("name") for col in collections_data if col.get("name")]
-            return collection_name in existing_collections
+            for col in collections_data:
+                if col.get("name") == collection_name:
+                    return col.get("id")
+
+            return None
         except Exception as e:
-            logger.error(f"Error checking collection existence: {e}")
-            return False
+            logger.error(f"Error getting collection ID: {e}")
+            return None
+
+    async def collection_exists(collection_name: str) -> bool:
+        """
+        Check if a collection exists by calling ChromaDB API directly.
+        Bypasses the buggy client deserialization.
+        """
+        collection_id = await get_collection_id(collection_name)
+        return collection_id is not None
 
     async def create_collection_direct(collection_name: str, metadata: dict = None) -> dict:
         """
@@ -97,13 +107,19 @@ def create_ingest_router(chroma_client):
         Add documents to a collection via direct API call.
         Bypasses the buggy client deserialization.
 
-        Note: ChromaDB v2 API requires 'embeddings' field but accepts an empty list []
-        to trigger automatic embedding generation from documents.
+        Note: ChromaDB v2 API requires collection UUID in the endpoint path.
+        Empty embeddings array [] triggers automatic embedding generation.
         """
         try:
+            # Get collection UUID from name
+            collection_id = await get_collection_id(collection_name)
+            if not collection_id:
+                raise ValueError(f"Collection '{collection_name}' not found")
+
             chroma_host = os.getenv("CHROMA_HOST", "localhost")
             chroma_port = os.getenv("CHROMA_PORT", "8001")
-            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_name}/add"
+            # v2 API requires collection UUID, not name
+            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_id}/add"
 
             # ChromaDB v2 API format
             # Empty embeddings array [] triggers auto-generation from documents
