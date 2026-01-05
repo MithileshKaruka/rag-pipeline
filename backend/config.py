@@ -24,19 +24,20 @@ def get_chroma_client():
         ChromaDB HttpClient or None if initialization fails
     """
     try:
-        # ChromaDB 0.4.24 HttpClient settings
-        settings = chromadb.config.Settings(
-            chroma_api_impl="chromadb.api.fastapi.FastAPI",
-            chroma_server_host=os.getenv("CHROMA_HOST", "localhost"),
-            chroma_server_http_port=int(os.getenv("CHROMA_PORT", "8001"))
-        )
+        # Simple HttpClient initialization for ChromaDB 0.4.24
+        # Test connection with a simple heartbeat call
+        import httpx
+        host = os.getenv("CHROMA_HOST", "localhost")
+        port = int(os.getenv("CHROMA_PORT", "8001"))
 
-        client = chromadb.HttpClient(
-            host=os.getenv("CHROMA_HOST", "localhost"),
-            port=int(os.getenv("CHROMA_PORT", "8001")),
-            settings=settings
-        )
-        logger.info("ChromaDB client initialized successfully")
+        # Test if ChromaDB server is reachable
+        test_url = f"http://{host}:{port}/api/v1/heartbeat"
+        response = httpx.get(test_url, timeout=5.0)
+        response.raise_for_status()
+
+        # If reachable, create client
+        client = chromadb.HttpClient(host=host, port=port)
+        logger.info(f"ChromaDB client initialized successfully at {host}:{port}")
         return client
     except Exception as e:
         logger.error(f"Failed to initialize ChromaDB client: {e}")
