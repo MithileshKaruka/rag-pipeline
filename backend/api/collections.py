@@ -42,7 +42,8 @@ def create_collections_router(chroma_client):
             chroma_port = os.getenv("CHROMA_PORT", "8001")
 
             # Call ChromaDB API directly to avoid client deserialization issues
-            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections"
+            # ChromaDB 0.4.24 uses v1 API, 0.5+ uses v2
+            url = f"http://{chroma_host}:{chroma_port}/api/v1/collections"
 
             async with httpx.AsyncClient() as client:
                 response = await client.get(url)
@@ -82,7 +83,8 @@ def create_collections_router(chroma_client):
             chroma_port = os.getenv("CHROMA_PORT", "8001")
 
             # Check if collection already exists by calling API directly
-            list_url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections"
+            # ChromaDB 0.4.24 uses v1 API
+            list_url = f"http://{chroma_host}:{chroma_port}/api/v1/collections"
 
             async with httpx.AsyncClient() as http_client:
                 response = await http_client.get(list_url)

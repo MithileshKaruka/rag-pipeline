@@ -55,7 +55,8 @@ def create_ingest_router(chroma_client):
         try:
             chroma_host = os.getenv("CHROMA_HOST", "localhost")
             chroma_port = os.getenv("CHROMA_PORT", "8001")
-            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections"
+            # ChromaDB 0.4.24 uses v1 API
+            url = f"http://{chroma_host}:{chroma_port}/api/v1/collections"
 
             async with httpx.AsyncClient() as http_client:
                 response = await http_client.get(url)
