@@ -69,6 +69,53 @@ def create_ingest_router(chroma_client):
             logger.error(f"Error checking collection existence: {e}")
             return False
 
+    async def create_collection_direct(collection_name: str, metadata: dict = None) -> dict:
+        """
+        Create a collection via direct API call.
+        Bypasses the buggy client deserialization.
+        """
+        try:
+            chroma_host = os.getenv("CHROMA_HOST", "localhost")
+            chroma_port = os.getenv("CHROMA_PORT", "8001")
+            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections"
+
+            payload = {
+                "name": collection_name,
+                "metadata": metadata or {}
+            }
+
+            async with httpx.AsyncClient() as http_client:
+                response = await http_client.post(url, json=payload)
+                response.raise_for_status()
+                return response.json()
+        except Exception as e:
+            logger.error(f"Error creating collection via API: {e}")
+            raise
+
+    async def add_documents_direct(collection_name: str, documents: list, metadatas: list, ids: list):
+        """
+        Add documents to a collection via direct API call.
+        Bypasses the buggy client deserialization.
+        """
+        try:
+            chroma_host = os.getenv("CHROMA_HOST", "localhost")
+            chroma_port = os.getenv("CHROMA_PORT", "8001")
+            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_name}/add"
+
+            payload = {
+                "ids": ids,
+                "documents": documents,
+                "metadatas": metadatas
+            }
+
+            async with httpx.AsyncClient(timeout=60.0) as http_client:
+                response = await http_client.post(url, json=payload)
+                response.raise_for_status()
+                return response.json()
+        except Exception as e:
+            logger.error(f"Error adding documents via API: {e}")
+            raise
+
     @router.post("/ingest/text", response_model=IngestResponse)
     async def ingest_text(request: IngestTextRequest):
         """
@@ -98,17 +145,13 @@ def create_ingest_router(chroma_client):
             raise HTTPException(status_code=503, detail="ChromaDB client not available")
 
         try:
-            # Check if collection exists and get/create accordingly
-            # We bypass get_collection() because it has deserialization bugs
-            if await collection_exists(request.collection_name):
-                # Collection exists, but we can't use get_collection() due to bug
-                # Instead, we'll use get_or_create_collection which works better
-                collection = chroma_client.get_or_create_collection(name=request.collection_name)
-                logger.info(f"Using existing collection: {request.collection_name}")
-            else:
-                # Collection doesn't exist, create it
-                collection = chroma_client.create_collection(name=request.collection_name)
+            # Check if collection exists, create if needed
+            # We bypass client methods completely due to deserialization bugs
+            if not await collection_exists(request.collection_name):
+                await create_collection_direct(request.collection_name)
                 logger.info(f"Created new collection: {request.collection_name}")
+            else:
+                logger.info(f"Using existing collection: {request.collection_name}")
 
             # Split text into chunks using recursive strategy
             # This intelligently splits on paragraphs, then sentences, then words
@@ -126,8 +169,9 @@ def create_ingest_router(chroma_client):
                 additional_metadata=request.metadata
             )
 
-            # Add documents to collection
-            collection.add(
+            # Add documents to collection via direct API call
+            await add_documents_direct(
+                collection_name=request.collection_name,
                 documents=chunks,
                 metadatas=metadatas,
                 ids=document_ids
@@ -198,16 +242,13 @@ def create_ingest_router(chroma_client):
             content = await file.read()
             text = content.decode("utf-8")
 
-            # Check if collection exists and get/create accordingly
-            # We bypass get_collection() because it has deserialization bugs
-            if await collection_exists(collection_name):
-                # Collection exists, use get_or_create_collection
-                collection = chroma_client.get_or_create_collection(name=collection_name)
-                logger.info(f"Using existing collection: {collection_name}")
-            else:
-                # Collection doesn't exist, create it
-                collection = chroma_client.create_collection(name=collection_name)
+            # Check if collection exists, create if needed
+            # We bypass client methods completely due to deserialization bugs
+            if not await collection_exists(collection_name):
+                await create_collection_direct(collection_name)
                 logger.info(f"Created new collection: {collection_name}")
+            else:
+                logger.info(f"Using existing collection: {collection_name}")
 
             # Split text into chunks using appropriate strategy based on file type
             if file_extension == ".md":
@@ -234,8 +275,9 @@ def create_ingest_router(chroma_client):
                 file_type=file_extension
             )
 
-            # Add documents to collection
-            collection.add(
+            # Add documents to collection via direct API call
+            await add_documents_direct(
+                collection_name=collection_name,
                 documents=chunks,
                 metadatas=metadatas,
                 ids=document_ids

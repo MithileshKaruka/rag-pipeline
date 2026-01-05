@@ -98,11 +98,17 @@ def create_collections_router(chroma_client):
                     detail=f"Collection '{request.collection_name}' already exists"
                 )
 
-            # Create new collection
-            collection = chroma_client.create_collection(
-                name=request.collection_name,
-                metadata=request.metadata or {}
-            )
+            # Create new collection via direct API call to avoid deserialization bug
+            create_url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections"
+
+            payload = {
+                "name": request.collection_name,
+                "metadata": request.metadata or {}
+            }
+
+            async with httpx.AsyncClient() as http_client:
+                response = await http_client.post(create_url, json=payload)
+                response.raise_for_status()
 
             logger.info(f"Created collection: {request.collection_name}")
 
