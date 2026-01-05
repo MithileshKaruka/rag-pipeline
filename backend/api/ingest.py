@@ -25,6 +25,8 @@ Benefits:
 """
 
 import logging
+import httpx
+import os
 from fastapi import APIRouter, HTTPException, UploadFile, File
 
 from models import IngestTextRequest, IngestResponse
@@ -44,6 +46,27 @@ def create_ingest_router(chroma_client):
     Returns:
         APIRouter with ingestion endpoints
     """
+
+    async def collection_exists(collection_name: str) -> bool:
+        """
+        Check if a collection exists by calling ChromaDB API directly.
+        Bypasses the buggy client deserialization.
+        """
+        try:
+            chroma_host = os.getenv("CHROMA_HOST", "localhost")
+            chroma_port = os.getenv("CHROMA_PORT", "8001")
+            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections"
+
+            async with httpx.AsyncClient() as http_client:
+                response = await http_client.get(url)
+                response.raise_for_status()
+                collections_data = response.json()
+
+            existing_collections = [col.get("name") for col in collections_data if col.get("name")]
+            return collection_name in existing_collections
+        except Exception as e:
+            logger.error(f"Error checking collection existence: {e}")
+            return False
 
     @router.post("/ingest/text", response_model=IngestResponse)
     async def ingest_text(request: IngestTextRequest):
@@ -74,21 +97,17 @@ def create_ingest_router(chroma_client):
             raise HTTPException(status_code=503, detail="ChromaDB client not available")
 
         try:
-            # Get or create collection with proper error handling for HTTP client
-            try:
-                collection = chroma_client.get_collection(name=request.collection_name)
+            # Check if collection exists and get/create accordingly
+            # We bypass get_collection() because it has deserialization bugs
+            if await collection_exists(request.collection_name):
+                # Collection exists, but we can't use get_collection() due to bug
+                # Instead, we'll use get_or_create_collection which works better
+                collection = chroma_client.get_or_create_collection(name=request.collection_name)
                 logger.info(f"Using existing collection: {request.collection_name}")
-            except ValueError:
+            else:
                 # Collection doesn't exist, create it
                 collection = chroma_client.create_collection(name=request.collection_name)
                 logger.info(f"Created new collection: {request.collection_name}")
-            except Exception as e:
-                # Collection might exist but get failed, try get_or_create
-                if "already exists" in str(e).lower():
-                    collection = chroma_client.get_collection(name=request.collection_name)
-                    logger.info(f"Collection exists, retrieved: {request.collection_name}")
-                else:
-                    raise
 
             # Split text into chunks using recursive strategy
             # This intelligently splits on paragraphs, then sentences, then words
@@ -178,21 +197,16 @@ def create_ingest_router(chroma_client):
             content = await file.read()
             text = content.decode("utf-8")
 
-            # Get or create collection with proper error handling for HTTP client
-            try:
-                collection = chroma_client.get_collection(name=collection_name)
+            # Check if collection exists and get/create accordingly
+            # We bypass get_collection() because it has deserialization bugs
+            if await collection_exists(collection_name):
+                # Collection exists, use get_or_create_collection
+                collection = chroma_client.get_or_create_collection(name=collection_name)
                 logger.info(f"Using existing collection: {collection_name}")
-            except ValueError:
+            else:
                 # Collection doesn't exist, create it
                 collection = chroma_client.create_collection(name=collection_name)
                 logger.info(f"Created new collection: {collection_name}")
-            except Exception as e:
-                # Collection might exist but get failed, try get_or_create
-                if "already exists" in str(e).lower():
-                    collection = chroma_client.get_collection(name=collection_name)
-                    logger.info(f"Collection exists, retrieved: {collection_name}")
-                else:
-                    raise
 
             # Split text into chunks using appropriate strategy based on file type
             if file_extension == ".md":
