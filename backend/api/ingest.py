@@ -122,10 +122,10 @@ def create_ingest_router(chroma_client):
             url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_id}/add"
 
             # ChromaDB v2 API format
-            # Empty embeddings array [] triggers auto-generation from documents
+            # Omit embeddings field entirely to trigger auto-generation
+            # ChromaDB will generate embeddings from documents automatically
             payload = {
                 "ids": ids,
-                "embeddings": [],  # Empty list = auto-generate from documents
                 "documents": documents,
                 "metadatas": metadatas
             }
