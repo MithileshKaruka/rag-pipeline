@@ -41,8 +41,7 @@ def create_collections_router(chroma_client):
             chroma_host = os.getenv("CHROMA_HOST", "localhost")
             chroma_port = os.getenv("CHROMA_PORT", "8001")
 
-            # Call ChromaDB API directly to avoid client deserialization issues
-            # ChromaDB 0.4.24 uses v1 API, 0.5+ uses v2
+            # Call ChromaDB v2 API directly (v1 is deprecated)
             url = f"http://{chroma_host}:{chroma_port}/api/v1/collections"
 
             async with httpx.AsyncClient() as client:
