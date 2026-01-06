@@ -102,21 +102,34 @@ def create_ingest_router(chroma_client):
             logger.error(f"Error creating collection via API: {e}")
             raise
 
-    async def add_documents_with_client(collection_name: str, documents: list, metadatas: list, ids: list):
+    def add_documents_with_client_sync(collection_name: str, documents: list, metadatas: list, ids: list):
         """
-        Add documents using ChromaDB client's add method.
-        The client handles embedding generation automatically.
-        We use get_or_create_collection to avoid deserialization of get_collection.
+        Add documents using ChromaDB client WITHOUT retrieving collection object.
+        Uses client's internal _make_request to bypass deserialization.
+        The server will auto-generate embeddings from documents.
         """
         try:
-            # Use get_or_create_collection which has fewer deserialization issues
-            collection = chroma_client.get_or_create_collection(name=collection_name)
+            # Get collection UUID
+            import asyncio
+            collection_id = asyncio.run(get_collection_id(collection_name))
+            if not collection_id:
+                raise ValueError(f"Collection '{collection_name}' not found")
 
-            # Call add() - the client will auto-generate embeddings
-            collection.add(
-                ids=ids,
-                documents=documents,
-                metadatas=metadatas
+            # Prepare the add request payload
+            # ChromaDB expects: ids, embeddings, metadatas, documents, uris
+            # When embeddings is omitted, server generates them from documents
+            add_body = {
+                "ids": ids,
+                "documents": documents,
+                "metadatas": metadatas
+            }
+
+            # Use the client's internal HTTP method to POST directly
+            # This bypasses Collection object deserialization
+            response = chroma_client._client._make_request(
+                "POST",
+                f"/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_id}/add",
+                json=add_body
             )
 
             logger.info(f"Successfully added {len(documents)} documents to '{collection_name}'")
@@ -178,8 +191,8 @@ def create_ingest_router(chroma_client):
                 additional_metadata=request.metadata
             )
 
-            # Add documents using client method (handles embedding generation)
-            await add_documents_with_client(
+            # Add documents using client's internal HTTP method (handles embedding generation)
+            add_documents_with_client_sync(
                 collection_name=request.collection_name,
                 documents=chunks,
                 metadatas=metadatas,
@@ -284,8 +297,8 @@ def create_ingest_router(chroma_client):
                 file_type=file_extension
             )
 
-            # Add documents using client method (handles embedding generation)
-            await add_documents_with_client(
+            # Add documents using client's internal HTTP method (handles embedding generation)
+            add_documents_with_client_sync(
                 collection_name=collection_name,
                 documents=chunks,
                 metadatas=metadatas,
