@@ -113,28 +113,51 @@ def create_ingest_router(chroma_client):
         """
         Generate embeddings using Ollama with nomic-embed-text model.
         This model is optimized for embeddings (faster and better quality than llama2).
-        Runs in a thread pool to avoid blocking.
+        Uses concurrent requests to speed up batch processing.
         """
         import requests
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        def generate_single_embedding(doc: str) -> list:
+            """Generate embedding for a single document."""
+            ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+            response = requests.post(
+                f"{ollama_host}/api/embeddings",
+                json={
+                    "model": "nomic-embed-text",
+                    "prompt": doc
+                },
+                timeout=30
+            )
+            response.raise_for_status()
+            return response.json()["embedding"]
 
         try:
-            ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
             embeddings = []
 
-            # Generate embedding for each document using Ollama API
-            for doc in documents:
-                response = requests.post(
-                    f"{ollama_host}/api/embeddings",
-                    json={
-                        "model": "nomic-embed-text",
-                        "prompt": doc
-                    }
-                )
-                response.raise_for_status()
-                embedding = response.json()["embedding"]
-                embeddings.append(embedding)
+            # Use ThreadPoolExecutor to parallelize embedding generation
+            # Limit to 4 concurrent requests to avoid overwhelming Ollama
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                # Submit all documents for embedding generation
+                future_to_index = {
+                    executor.submit(generate_single_embedding, doc): i
+                    for i, doc in enumerate(documents)
+                }
 
-            logger.info(f"Generated embeddings for {len(documents)} documents using Ollama (nomic-embed-text)")
+                # Create a list to store embeddings in order
+                embeddings = [None] * len(documents)
+
+                # Collect results as they complete
+                for future in as_completed(future_to_index):
+                    index = future_to_index[future]
+                    try:
+                        embedding = future.result()
+                        embeddings[index] = embedding
+                    except Exception as e:
+                        logger.error(f"Error generating embedding for document {index}: {e}")
+                        raise
+
+            logger.info(f"Generated embeddings for {len(documents)} documents using Ollama (nomic-embed-text) with parallel processing")
             return embeddings
         except Exception as e:
             logger.error(f"Error generating embeddings with Ollama: {e}")
@@ -163,6 +186,11 @@ def create_ingest_router(chroma_client):
                     documents
                 )
 
+            # Direct API call to add documents
+            chroma_host = os.getenv("CHROMA_HOST", "localhost")
+            chroma_port = os.getenv("CHROMA_PORT", "8001")
+            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_id}/add"
+
             # Prepare add request with embeddings
             add_body = {
                 "ids": ids,
@@ -171,14 +199,32 @@ def create_ingest_router(chroma_client):
                 "metadatas": metadatas
             }
 
-            # Direct API call to add documents
-            chroma_host = os.getenv("CHROMA_HOST", "localhost")
-            chroma_port = os.getenv("CHROMA_PORT", "8001")
-            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_id}/add"
+            # Log ChromaDB add request (without full embeddings for brevity)
+            import json
+            log_body = {
+                "ids": ids,
+                "embeddings": f"[{len(embeddings)} embeddings of dimension {len(embeddings[0]) if embeddings else 0}]",
+                "documents": documents[:2] + ["..."] if len(documents) > 2 else documents,  # Show first 2 docs
+                "metadatas": metadatas[:2] + ["..."] if len(metadatas) > 2 else metadatas
+            }
+            logger.info("=" * 80)
+            logger.info("CHROMADB ADD REQUEST")
+            logger.info("=" * 80)
+            logger.info(f"URL: POST {url}")
+            logger.info(f"Request body (abbreviated): {json.dumps(log_body, indent=2)}")
 
             async with httpx.AsyncClient(timeout=120.0) as http_client:
                 response = await http_client.post(url, json=add_body)
                 response.raise_for_status()
+                response_data = response.json()
+
+            # Log ChromaDB add response
+            logger.info("=" * 80)
+            logger.info("CHROMADB ADD RESPONSE")
+            logger.info("=" * 80)
+            logger.info(f"Status: {response.status_code}")
+            logger.info(f"Response body: {json.dumps(response_data, indent=2)}")
+            logger.info("=" * 80)
 
             logger.info(f"Successfully added {len(documents)} documents to '{collection_name}'")
             return {"status": "success", "count": len(documents)}
@@ -214,6 +260,14 @@ def create_ingest_router(chroma_client):
         Returns:
             IngestResponse with ingestion details including chunk count and IDs
         """
+        import json
+
+        # Log incoming request
+        logger.info("=" * 80)
+        logger.info("INGEST TEXT REQUEST")
+        logger.info("=" * 80)
+        logger.info(f"Request payload: {json.dumps(request.model_dump(), indent=2)}")
+
         if not chroma_client:
             raise HTTPException(status_code=503, detail="ChromaDB client not available")
 
@@ -252,12 +306,21 @@ def create_ingest_router(chroma_client):
 
             logger.info(f"Ingested {len(chunks)} chunks into collection '{request.collection_name}'")
 
-            return IngestResponse(
+            response = IngestResponse(
                 message=f"Successfully ingested {len(chunks)} chunks",
                 collection_name=request.collection_name,
                 num_chunks=len(chunks),
                 document_ids=document_ids
             )
+
+            # Log response
+            logger.info("=" * 80)
+            logger.info("INGEST TEXT RESPONSE")
+            logger.info("=" * 80)
+            logger.info(f"Response payload: {json.dumps(response.model_dump(), indent=2)}")
+            logger.info("=" * 80)
+
+            return response
 
         except HTTPException:
             raise
@@ -297,6 +360,14 @@ def create_ingest_router(chroma_client):
         Returns:
             IngestResponse with ingestion details including chunk count and IDs
         """
+        # Log incoming request
+        logger.info("=" * 80)
+        logger.info("INGEST FILE REQUEST")
+        logger.info("=" * 80)
+        logger.info(f"File: {file.filename}")
+        logger.info(f"Collection: {collection_name}")
+        logger.info(f"Chunk size: {chunk_size}, Overlap: {chunk_overlap}")
+
         if not chroma_client:
             raise HTTPException(status_code=503, detail="ChromaDB client not available")
 
@@ -358,12 +429,21 @@ def create_ingest_router(chroma_client):
 
             logger.info(f"Ingested file '{file.filename}' ({len(chunks)} chunks) into '{collection_name}'")
 
-            return IngestResponse(
+            response = IngestResponse(
                 message=f"Successfully ingested file '{file.filename}' with {len(chunks)} chunks",
                 collection_name=collection_name,
                 num_chunks=len(chunks),
                 document_ids=document_ids
             )
+
+            # Log response
+            logger.info("=" * 80)
+            logger.info("INGEST FILE RESPONSE")
+            logger.info("=" * 80)
+            logger.info(f"Response payload: {json.dumps(response.model_dump(), indent=2)}")
+            logger.info("=" * 80)
+
+            return response
 
         except HTTPException:
             raise

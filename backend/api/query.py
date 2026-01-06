@@ -57,7 +57,8 @@ def create_query_router(chroma_client, llm):
                 json={
                     "model": "nomic-embed-text",
                     "prompt": query_text
-                }
+                },
+                timeout=30  # Add timeout to prevent hanging
             )
             response.raise_for_status()
             embedding = response.json()["embedding"]
@@ -83,6 +84,14 @@ def create_query_router(chroma_client, llm):
         Returns:
             QueryResponse with answer and source documents
         """
+        import json
+
+        # Log incoming request
+        logger.info("=" * 80)
+        logger.info("QUERY REQUEST")
+        logger.info("=" * 80)
+        logger.info(f"Request payload: {json.dumps(request.model_dump(), indent=2)}")
+
         if not chroma_client:
             raise HTTPException(status_code=503, detail="ChromaDB client not available")
 
@@ -123,10 +132,31 @@ def create_query_router(chroma_client, llm):
                 "include": ["documents", "metadatas"]
             }
 
+            # Log ChromaDB query request
+            log_query_body = {
+                "query_embeddings": f"[[{len(query_embedding)} dimensional embedding vector]]",
+                "n_results": request.n_results,
+                "include": ["documents", "metadatas"]
+            }
+            logger.info("=" * 80)
+            logger.info("CHROMADB QUERY REQUEST")
+            logger.info("=" * 80)
+            logger.info(f"URL: POST {url}")
+            logger.info(f"Request body (abbreviated): {json.dumps(log_query_body, indent=2)}")
+
             async with httpx.AsyncClient(timeout=120.0) as http_client:
                 response = await http_client.post(url, json=query_body)
                 response.raise_for_status()
                 results = response.json()
+
+            # Log ChromaDB query response
+            logger.info("=" * 80)
+            logger.info("CHROMADB QUERY RESPONSE")
+            logger.info("=" * 80)
+            logger.info(f"Status: {response.status_code}")
+            logger.info(f"Found {len(results.get('documents', [[]])[0])} matching documents")
+            logger.info(f"Response body: {json.dumps(results, indent=2)}")
+            logger.info("=" * 80)
 
             # Step 4: Extract documents and metadata
             if not results.get('documents') or not results['documents'][0]:
@@ -167,11 +197,20 @@ Answer:"""
                 for doc, meta in zip(documents, metadatas)
             ]
 
-            return QueryResponse(
+            query_response = QueryResponse(
                 answer=response.strip(),
                 sources=sources,
                 model_used=os.getenv("OLLAMA_MODEL", "llama2")
             )
+
+            # Log final response
+            logger.info("=" * 80)
+            logger.info("QUERY RESPONSE")
+            logger.info("=" * 80)
+            logger.info(f"Response payload: {json.dumps(query_response.model_dump(), indent=2)}")
+            logger.info("=" * 80)
+
+            return query_response
 
         except HTTPException:
             raise
