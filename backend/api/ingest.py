@@ -117,9 +117,13 @@ def create_ingest_router(chroma_client):
 
             client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
 
-            # Get collection with default embedding function
+            # Use get_or_create_collection instead of get_collection
+            # This might avoid the deserialization bug
             default_ef = embedding_functions.DefaultEmbeddingFunction()
-            collection = client.get_collection(name=collection_name, embedding_function=default_ef)
+            collection = client.get_or_create_collection(
+                name=collection_name,
+                embedding_function=default_ef
+            )
 
             # Add documents - embedding function will auto-generate embeddings
             collection.add(
