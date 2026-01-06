@@ -3,6 +3,8 @@ Query API endpoints for RAG retrieval
 """
 
 import logging
+import httpx
+import os
 from fastapi import APIRouter, HTTPException
 
 from models import QueryRequest, QueryResponse, SourceDocument
@@ -22,6 +24,48 @@ def create_query_router(chroma_client, llm):
     Returns:
         APIRouter with query endpoints
     """
+
+    async def get_collection_id(collection_name: str) -> str:
+        """Get collection UUID by name via direct API call."""
+        try:
+            chroma_host = os.getenv("CHROMA_HOST", "localhost")
+            chroma_port = os.getenv("CHROMA_PORT", "8001")
+            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections"
+
+            async with httpx.AsyncClient() as http_client:
+                response = await http_client.get(url)
+                response.raise_for_status()
+                collections_data = response.json()
+
+            for col in collections_data:
+                if col.get("name") == collection_name:
+                    return col.get("id")
+
+            return None
+        except Exception as e:
+            logger.error(f"Error getting collection ID: {e}")
+            return None
+
+    def generate_query_embedding(query_text: str) -> list:
+        """Generate embedding for query using Ollama nomic-embed-text."""
+        import requests
+
+        try:
+            ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+            response = requests.post(
+                f"{ollama_host}/api/embeddings",
+                json={
+                    "model": "nomic-embed-text",
+                    "prompt": query_text
+                }
+            )
+            response.raise_for_status()
+            embedding = response.json()["embedding"]
+            logger.info(f"Generated query embedding using nomic-embed-text")
+            return embedding
+        except Exception as e:
+            logger.error(f"Error generating query embedding: {e}")
+            raise
 
     @router.post("/query", response_model=QueryResponse)
     async def query_rag(request: QueryRequest):
@@ -46,34 +90,61 @@ def create_query_router(chroma_client, llm):
             raise HTTPException(status_code=503, detail="Ollama LLM not available")
 
         try:
-            # Step 1: Get collection
+            # Step 1: Get collection ID
             logger.info(f"Querying collection: {request.collection_name}")
-            collection = chroma_client.get_collection(request.collection_name)
+            collection_id = await get_collection_id(request.collection_name)
+            if not collection_id:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Collection '{request.collection_name}' not found"
+                )
 
-            # Step 2: Perform similarity search
+            # Step 2: Generate embedding for query
+            import asyncio
+            from concurrent.futures import ThreadPoolExecutor
+
+            loop = asyncio.get_event_loop()
+            with ThreadPoolExecutor() as pool:
+                query_embedding = await loop.run_in_executor(
+                    pool,
+                    generate_query_embedding,
+                    request.question
+                )
+
+            # Step 3: Perform similarity search via direct API call
             logger.info(f"Searching for: {request.question}")
-            results = collection.query(
-                query_texts=[request.question],
-                n_results=request.n_results
-            )
+            chroma_host = os.getenv("CHROMA_HOST", "localhost")
+            chroma_port = os.getenv("CHROMA_PORT", "8001")
+            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_id}/query"
 
-            # Step 3: Extract documents and metadata
-            if not results['documents'] or not results['documents'][0]:
+            query_body = {
+                "query_embeddings": [query_embedding],
+                "n_results": request.n_results,
+                "include": ["documents", "metadatas"]
+            }
+
+            async with httpx.AsyncClient(timeout=120.0) as http_client:
+                response = await http_client.post(url, json=query_body)
+                response.raise_for_status()
+                results = response.json()
+
+            # Step 4: Extract documents and metadata
+            if not results.get('documents') or not results['documents'][0]:
                 raise HTTPException(
                     status_code=404,
                     detail=f"No documents found in collection '{request.collection_name}'"
                 )
 
             documents = results['documents'][0]
-            metadatas = results['metadatas'][0] if results['metadatas'] else [{}] * len(documents)
+            metadatas = results['metadatas'][0] if results.get('metadatas') else [{}] * len(documents)
 
-            # Step 4: Build context from retrieved documents
+            # Step 5: Build context from retrieved documents
             context = "\n\n".join([
                 f"Document {i+1}:\n{doc}"
                 for i, doc in enumerate(documents)
             ])
 
-            # Step 5: Construct prompt
+            # Step 6: Construct prompt
             prompt = f"""Based on the following context, answer the question. If the answer cannot be found in the context, say "I don't have enough information to answer that question."
 
 Context:
@@ -83,11 +154,11 @@ Question: {request.question}
 
 Answer:"""
 
-            # Step 6: Generate response using LLM
+            # Step 7: Generate response using LLM (llama2 for query generation)
             logger.info("Generating response with LLM")
             response = llm(prompt)
 
-            # Step 7: Prepare source documents
+            # Step 8: Prepare source documents
             sources = [
                 SourceDocument(
                     content=doc,
@@ -96,7 +167,6 @@ Answer:"""
                 for doc, meta in zip(documents, metadatas)
             ]
 
-            import os
             return QueryResponse(
                 answer=response.strip(),
                 sources=sources,
