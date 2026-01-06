@@ -102,40 +102,58 @@ def create_ingest_router(chroma_client):
             logger.error(f"Error creating collection via API: {e}")
             raise
 
-    async def add_documents_with_client_async(collection_name: str, documents: list, metadatas: list, ids: list):
+    def add_documents_sync(collection_name: str, documents: list, metadatas: list, ids: list):
         """
-        Add documents via direct API call.
-        The server will auto-generate embeddings from documents.
+        Add documents using ChromaDB client's add method in a thread.
+        This uses the default embedding function from the client.
         """
         try:
-            # Get collection UUID
-            collection_id = await get_collection_id(collection_name)
-            if not collection_id:
-                raise ValueError(f"Collection '{collection_name}' not found")
+            import chromadb
+            from chromadb.utils import embedding_functions
 
-            # Prepare the add request payload
-            # ChromaDB expects: ids, embeddings, metadatas, documents, uris
-            # When embeddings is omitted, server generates them from documents
-            add_body = {
-                "ids": ids,
-                "documents": documents,
-                "metadatas": metadatas
-            }
-
-            # Make direct API call to add documents
+            # Create a new client connection for this thread
             chroma_host = os.getenv("CHROMA_HOST", "localhost")
-            chroma_port = os.getenv("CHROMA_PORT", "8001")
-            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_id}/add"
+            chroma_port = int(os.getenv("CHROMA_PORT", "8001"))
 
-            async with httpx.AsyncClient() as http_client:
-                response = await http_client.post(url, json=add_body)
-                response.raise_for_status()
+            client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
+
+            # Get collection with default embedding function
+            default_ef = embedding_functions.DefaultEmbeddingFunction()
+            collection = client.get_collection(name=collection_name, embedding_function=default_ef)
+
+            # Add documents - embedding function will auto-generate embeddings
+            collection.add(
+                documents=documents,
+                metadatas=metadatas,
+                ids=ids
+            )
 
             logger.info(f"Successfully added {len(documents)} documents to '{collection_name}'")
             return {"status": "success", "count": len(documents)}
         except Exception as e:
             logger.error(f"Error adding documents: {e}")
             raise
+
+    async def add_documents_with_client_async(collection_name: str, documents: list, metadatas: list, ids: list):
+        """
+        Add documents using ChromaDB client in a background thread.
+        This avoids async/blocking conflicts and uses the client's embedding function.
+        """
+        import asyncio
+        from concurrent.futures import ThreadPoolExecutor
+
+        # Run sync function in thread pool to avoid blocking
+        loop = asyncio.get_event_loop()
+        with ThreadPoolExecutor() as pool:
+            result = await loop.run_in_executor(
+                pool,
+                add_documents_sync,
+                collection_name,
+                documents,
+                metadatas,
+                ids
+            )
+        return result
 
     @router.post("/ingest/text", response_model=IngestResponse)
     async def ingest_text(request: IngestTextRequest):
