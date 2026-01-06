@@ -109,20 +109,58 @@ def create_ingest_router(chroma_client):
             logger.error(f"Error creating collection via API: {e}")
             raise
 
+    def generate_embeddings_with_ollama(documents: list) -> list:
+        """
+        Generate embeddings using Ollama with nomic-embed-text model.
+        This model is optimized for embeddings (faster and better quality than llama2).
+        Runs in a thread pool to avoid blocking.
+        """
+        try:
+            from chromadb.utils.embedding_functions import OllamaEmbeddingFunction
+
+            # Use Ollama with nomic-embed-text for embeddings
+            # This is a dedicated embedding model (768 dimensions, optimized for retrieval)
+            ollama_ef = OllamaEmbeddingFunction(
+                url=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
+                model_name="nomic-embed-text"
+            )
+
+            # Generate embeddings
+            embeddings = ollama_ef(documents)
+
+            logger.info(f"Generated embeddings for {len(documents)} documents using Ollama (nomic-embed-text)")
+            return embeddings
+        except Exception as e:
+            logger.error(f"Error generating embeddings with Ollama: {e}")
+            raise
+
     async def add_documents_with_client_async(collection_name: str, documents: list, metadatas: list, ids: list):
         """
-        Add documents via direct API call, letting ChromaDB server handle embeddings.
-        Completely bypasses the buggy Python client.
+        Add documents via direct API call with Ollama-generated embeddings.
+        Uses Ollama for embedding generation, then calls ChromaDB API directly.
         """
+        import asyncio
+        from concurrent.futures import ThreadPoolExecutor
+
         try:
             # Get collection UUID
             collection_id = await get_collection_id(collection_name)
             if not collection_id:
                 raise ValueError(f"Collection '{collection_name}' not found")
 
-            # Prepare add request - omit embeddings to let server generate them
+            # Generate embeddings using Ollama in thread pool (blocking operation)
+            loop = asyncio.get_event_loop()
+            with ThreadPoolExecutor() as pool:
+                embeddings = await loop.run_in_executor(
+                    pool,
+                    generate_embeddings_with_ollama,
+                    documents
+                )
+
+            # Prepare add request with embeddings
             add_body = {
                 "ids": ids,
+                "embeddings": embeddings,
                 "documents": documents,
                 "metadatas": metadatas
             }
@@ -132,7 +170,7 @@ def create_ingest_router(chroma_client):
             chroma_port = os.getenv("CHROMA_PORT", "8001")
             url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_id}/add"
 
-            async with httpx.AsyncClient(timeout=60.0) as http_client:
+            async with httpx.AsyncClient(timeout=120.0) as http_client:
                 response = await http_client.post(url, json=add_body)
 
                 if response.status_code != 200:
