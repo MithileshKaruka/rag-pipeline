@@ -178,10 +178,6 @@ def create_ingest_router(chroma_client):
 
             async with httpx.AsyncClient(timeout=120.0) as http_client:
                 response = await http_client.post(url, json=add_body)
-
-                if response.status_code != 200:
-                    logger.error(f"ChromaDB add API error: {response.status_code} - {response.text}")
-
                 response.raise_for_status()
 
             logger.info(f"Successfully added {len(documents)} documents to '{collection_name}'")
