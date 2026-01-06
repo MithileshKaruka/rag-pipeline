@@ -115,18 +115,24 @@ def create_ingest_router(chroma_client):
         This model is optimized for embeddings (faster and better quality than llama2).
         Runs in a thread pool to avoid blocking.
         """
+        import requests
+
         try:
-            from chromadb.utils.embedding_functions import OllamaEmbeddingFunction
+            ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+            embeddings = []
 
-            # Use Ollama with nomic-embed-text for embeddings
-            # This is a dedicated embedding model (768 dimensions, optimized for retrieval)
-            ollama_ef = OllamaEmbeddingFunction(
-                url=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
-                model_name="nomic-embed-text"
-            )
-
-            # Generate embeddings
-            embeddings = ollama_ef(documents)
+            # Generate embedding for each document using Ollama API
+            for doc in documents:
+                response = requests.post(
+                    f"{ollama_host}/api/embeddings",
+                    json={
+                        "model": "nomic-embed-text",
+                        "prompt": doc
+                    }
+                )
+                response.raise_for_status()
+                embedding = response.json()["embedding"]
+                embeddings.append(embedding)
 
             logger.info(f"Generated embeddings for {len(documents)} documents using Ollama (nomic-embed-text)")
             return embeddings
