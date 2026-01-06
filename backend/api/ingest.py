@@ -102,16 +102,15 @@ def create_ingest_router(chroma_client):
             logger.error(f"Error creating collection via API: {e}")
             raise
 
-    def add_documents_with_client_sync(collection_name: str, documents: list, metadatas: list, ids: list):
+    async def add_documents_with_client_async(collection_name: str, documents: list, metadatas: list, ids: list):
         """
         Add documents using ChromaDB client WITHOUT retrieving collection object.
         Uses client's internal _make_request to bypass deserialization.
         The server will auto-generate embeddings from documents.
         """
         try:
-            # Get collection UUID
-            import asyncio
-            collection_id = asyncio.run(get_collection_id(collection_name))
+            # Get collection UUID (await since we're in async context)
+            collection_id = await get_collection_id(collection_name)
             if not collection_id:
                 raise ValueError(f"Collection '{collection_name}' not found")
 
@@ -192,7 +191,7 @@ def create_ingest_router(chroma_client):
             )
 
             # Add documents using client's internal HTTP method (handles embedding generation)
-            add_documents_with_client_sync(
+            await add_documents_with_client_async(
                 collection_name=request.collection_name,
                 documents=chunks,
                 metadatas=metadatas,
@@ -298,7 +297,7 @@ def create_ingest_router(chroma_client):
             )
 
             # Add documents using client's internal HTTP method (handles embedding generation)
-            add_documents_with_client_sync(
+            await add_documents_with_client_async(
                 collection_name=collection_name,
                 documents=chunks,
                 metadatas=metadatas,
