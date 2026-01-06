@@ -104,12 +104,11 @@ def create_ingest_router(chroma_client):
 
     async def add_documents_with_client_async(collection_name: str, documents: list, metadatas: list, ids: list):
         """
-        Add documents using ChromaDB client WITHOUT retrieving collection object.
-        Uses client's internal _make_request to bypass deserialization.
+        Add documents via direct API call.
         The server will auto-generate embeddings from documents.
         """
         try:
-            # Get collection UUID (await since we're in async context)
+            # Get collection UUID
             collection_id = await get_collection_id(collection_name)
             if not collection_id:
                 raise ValueError(f"Collection '{collection_name}' not found")
@@ -123,18 +122,19 @@ def create_ingest_router(chroma_client):
                 "metadatas": metadatas
             }
 
-            # Use the client's internal HTTP method to POST directly
-            # This bypasses Collection object deserialization
-            response = chroma_client._client._make_request(
-                "POST",
-                f"/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_id}/add",
-                json=add_body
-            )
+            # Make direct API call to add documents
+            chroma_host = os.getenv("CHROMA_HOST", "localhost")
+            chroma_port = os.getenv("CHROMA_PORT", "8001")
+            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_id}/add"
+
+            async with httpx.AsyncClient() as http_client:
+                response = await http_client.post(url, json=add_body)
+                response.raise_for_status()
 
             logger.info(f"Successfully added {len(documents)} documents to '{collection_name}'")
             return {"status": "success", "count": len(documents)}
         except Exception as e:
-            logger.error(f"Error adding documents with client: {e}")
+            logger.error(f"Error adding documents: {e}")
             raise
 
     @router.post("/ingest/text", response_model=IngestResponse)
