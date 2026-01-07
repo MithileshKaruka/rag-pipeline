@@ -20,6 +20,9 @@ export const API_BASE_URL = getApiBaseUrl();
 export const API_ENDPOINTS = {
   HEALTH: `${API_BASE_URL.replace('/api', '')}/health`,
   QUERY: `${API_BASE_URL}/query`,
+  QUERY_STREAM: `${API_BASE_URL}/query/stream`,
+  CACHE_STATS: `${API_BASE_URL}/cache/stats`,
+  CACHE_CLEAR: `${API_BASE_URL}/cache`,
   COLLECTIONS: `${API_BASE_URL}/collections`,
   CREATE_COLLECTION: `${API_BASE_URL}/collections/create`,
   INGEST_TEXT: `${API_BASE_URL}/ingest/text`,

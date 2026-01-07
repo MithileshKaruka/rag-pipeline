@@ -16,6 +16,7 @@ function App() {
   const [sources, setSources] = useState([]);
   const [queryLoading, setQueryLoading] = useState(false);
   const [queryError, setQueryError] = useState('');
+  const [useStreaming, setUseStreaming] = useState(true); // Toggle for streaming mode
 
   // Ingest tab state
   const [ingestMode, setIngestMode] = useState('text'); // 'text' or 'file'
@@ -90,7 +91,7 @@ function App() {
   };
 
   /**
-   * Submit query to RAG backend
+   * Submit query to RAG backend with streaming support
    */
   const handleQuery = async (e) => {
     e.preventDefault();
@@ -106,14 +107,20 @@ function App() {
     setSources([]);
 
     try {
-      const response = await axios.post(API_ENDPOINTS.QUERY, {
-        question: question,
-        collection_name: selectedCollection,
-        n_results: 3
-      });
+      if (useStreaming) {
+        // Use streaming endpoint
+        await handleStreamingQuery();
+      } else {
+        // Use regular endpoint (with caching)
+        const response = await axios.post(API_ENDPOINTS.QUERY, {
+          question: question,
+          collection_name: selectedCollection,
+          n_results: 3
+        });
 
-      setAnswer(response.data.answer);
-      setSources(response.data.sources);
+        setAnswer(response.data.answer);
+        setSources(response.data.sources);
+      }
     } catch (err) {
       console.error('Query error:', err);
       setQueryError(
@@ -123,6 +130,60 @@ function App() {
       );
     } finally {
       setQueryLoading(false);
+    }
+  };
+
+  /**
+   * Handle streaming query response
+   */
+  const handleStreamingQuery = async () => {
+    try {
+      const response = await fetch(API_ENDPOINTS.QUERY_STREAM, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: question,
+          collection_name: selectedCollection,
+          n_results: 3
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let currentAnswer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = JSON.parse(line.slice(6));
+
+            if (data.type === 'sources') {
+              // Set sources when received
+              setSources(data.data.sources);
+            } else if (data.type === 'token') {
+              // Append each token to answer
+              currentAnswer += data.data;
+              setAnswer(currentAnswer);
+            } else if (data.type === 'done') {
+              console.log('Stream complete');
+            }
+          }
+        }
+      }
+    } catch (err) {
+      throw err;
     }
   };
 
@@ -299,6 +360,25 @@ function App() {
                 />
               </div>
 
+              <div className="form-group streaming-toggle">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={useStreaming}
+                    onChange={(e) => setUseStreaming(e.target.checked)}
+                    disabled={queryLoading}
+                  />
+                  <span className="streaming-label">
+                    Use Streaming Mode {useStreaming ? '⚡' : '💾'}
+                    <span className="streaming-hint">
+                      {useStreaming
+                        ? '(Real-time tokens, no caching)'
+                        : '(Cached responses, faster for repeated questions)'}
+                    </span>
+                  </span>
+                </label>
+              </div>
+
               <div className="button-group">
                 <button
                   type="submit"
@@ -319,10 +399,10 @@ function App() {
             </form>
 
             {/* Loading Indicator */}
-            {queryLoading && (
+            {queryLoading && !answer && (
               <div className="loading">
                 <div className="spinner"></div>
-                <p>Processing your question...</p>
+                <p>{useStreaming ? 'Starting stream...' : 'Processing your question...'}</p>
               </div>
             )}
 
@@ -339,6 +419,7 @@ function App() {
                 <h2>Answer:</h2>
                 <div className="answer-content">
                   {answer}
+                  {queryLoading && useStreaming && <span className="streaming-cursor">▊</span>}
                 </div>
 
                 {/* Source Documents */}
