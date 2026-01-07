@@ -184,7 +184,7 @@ Question: {request.question}
 
 Answer:"""
 
-            # Step 7: Generate response using LLM (llama2 for query generation)
+            # Step 7: Generate response using LLM (llama2:7b-chat-q4_0 quantized model)
             logger.info("Generating response with LLM")
             response = llm(prompt)
 
@@ -200,7 +200,7 @@ Answer:"""
             query_response = QueryResponse(
                 answer=response.strip(),
                 sources=sources,
-                model_used=os.getenv("OLLAMA_MODEL", "llama2")
+                model_used=os.getenv("OLLAMA_MODEL", "llama2:7b-chat-q4_0")
             )
 
             # Log final response

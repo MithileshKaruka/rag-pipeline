@@ -53,7 +53,7 @@ def create_health_router(chroma_client, llm):
             status="healthy" if (chromadb_connected and ollama_connected) else "degraded",
             chromadb_connected=chromadb_connected,
             ollama_connected=ollama_connected,
-            model=os.getenv("OLLAMA_MODEL", "llama2")
+            model=os.getenv("OLLAMA_MODEL", "llama2:7b-chat-q4_0")
         )
 
     return router

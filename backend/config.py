@@ -47,9 +47,9 @@ def get_ollama_llm():
     try:
         llm = Ollama(
             base_url=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
-            model=os.getenv("OLLAMA_MODEL", "llama2")
+            model=os.getenv("OLLAMA_MODEL", "llama2:7b-chat-q4_0")
         )
-        logger.info(f"Ollama LLM initialized with model: {os.getenv('OLLAMA_MODEL', 'llama2')}")
+        logger.info(f"Ollama LLM initialized with model: {os.getenv('OLLAMA_MODEL', 'llama2:7b-chat-q4_0')}")
         return llm
     except Exception as e:
         logger.error(f"Failed to initialize Ollama LLM: {e}")
