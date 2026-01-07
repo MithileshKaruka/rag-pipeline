@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_chroma_client, get_ollama_llm, get_allowed_origins
 from api.health import create_health_router
-from api.query import create_query_router
+# from api.query import create_query_router  # Replaced by enhanced version
 from api.query_enhanced import create_enhanced_query_router
 from api.collections import create_collections_router
 from api.ingest import create_ingest_router
@@ -42,15 +42,13 @@ llm = get_ollama_llm()
 
 # Create and include routers
 health_router = create_health_router(chroma_client, llm)
-query_router = create_query_router(chroma_client, llm)
-enhanced_query_router = create_enhanced_query_router(chroma_client, llm)
+query_router = create_enhanced_query_router(chroma_client, llm)  # Using enhanced version with caching & streaming
 collections_router = create_collections_router(chroma_client)
 ingest_router = create_ingest_router(chroma_client)
 
 # Include routers in the app
 app.include_router(health_router, tags=["Health"])
-app.include_router(query_router, prefix="/api", tags=["Query (Basic)"])
-app.include_router(enhanced_query_router, prefix="/api", tags=["Query (Enhanced - Streaming & Caching)"])
+app.include_router(query_router, prefix="/api", tags=["Query"])
 app.include_router(collections_router, prefix="/api", tags=["Collections"])
 app.include_router(ingest_router, prefix="/api", tags=["Ingestion"])
 
