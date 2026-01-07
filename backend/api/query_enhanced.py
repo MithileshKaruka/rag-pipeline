@@ -89,6 +89,8 @@ def create_enhanced_query_router(chroma_client, llm):
             ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
             ollama_model = os.getenv("OLLAMA_MODEL", "llama2:7b-chat-q4_0")
 
+            # Use tuple for separate connect and read timeouts
+            # Connect timeout: 10s, Read timeout: 600s (10 minutes for long responses)
             response = requests.post(
                 f"{ollama_host}/api/generate",
                 json={
@@ -97,7 +99,7 @@ def create_enhanced_query_router(chroma_client, llm):
                     "stream": True
                 },
                 stream=True,
-                timeout=180
+                timeout=(10, 600)
             )
             response.raise_for_status()
 

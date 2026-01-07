@@ -138,6 +138,7 @@ function App() {
    */
   const handleStreamingQuery = async () => {
     try {
+      console.log('Starting streaming query...');
       const response = await fetch(API_ENDPOINTS.QUERY_STREAM, {
         method: 'POST',
         headers: {
@@ -150,6 +151,7 @@ function App() {
         })
       });
 
+      console.log('Response status:', response.status);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -159,12 +161,17 @@ function App() {
       let currentAnswer = '';
       let buffer = ''; // Buffer for incomplete lines
 
+      console.log('Starting to read stream...');
       while (true) {
         const { value, done } = await reader.read();
-        if (done) break;
+        if (done) {
+          console.log('Stream reading complete');
+          break;
+        }
 
         // Decode chunk and add to buffer
         const chunk = decoder.decode(value, { stream: true });
+        console.log('Received chunk:', chunk.substring(0, 100)); // Log first 100 chars
         buffer += chunk;
 
         // Split by newlines but keep the last incomplete line in buffer
@@ -177,14 +184,17 @@ function App() {
               const jsonStr = line.slice(6).trim();
               if (jsonStr) {
                 const data = JSON.parse(jsonStr);
+                console.log('Parsed data:', data.type);
 
                 if (data.type === 'sources') {
                   // Set sources when received
+                  console.log('Received sources:', data.data.sources.length);
                   setSources(data.data.sources);
                 } else if (data.type === 'token') {
                   // Append each token to answer
                   currentAnswer += data.data;
                   setAnswer(currentAnswer);
+                  console.log('Token received, answer length:', currentAnswer.length);
                 } else if (data.type === 'done') {
                   console.log('Stream complete');
                 }
@@ -204,7 +214,7 @@ function App() {
           if (jsonStr) {
             const data = JSON.parse(jsonStr);
             if (data.type === 'done') {
-              console.log('Stream complete');
+              console.log('Stream complete (from buffer)');
             }
           }
         } catch (parseErr) {
@@ -212,6 +222,7 @@ function App() {
         }
       }
     } catch (err) {
+      console.error('Streaming error:', err);
       throw err;
     }
   };
