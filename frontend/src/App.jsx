@@ -157,29 +157,58 @@ function App() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let currentAnswer = '';
+      let buffer = ''; // Buffer for incomplete lines
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
+        // Decode chunk and add to buffer
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
+
+        // Split by newlines but keep the last incomplete line in buffer
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            const data = JSON.parse(line.slice(6));
+            try {
+              const jsonStr = line.slice(6).trim();
+              if (jsonStr) {
+                const data = JSON.parse(jsonStr);
 
-            if (data.type === 'sources') {
-              // Set sources when received
-              setSources(data.data.sources);
-            } else if (data.type === 'token') {
-              // Append each token to answer
-              currentAnswer += data.data;
-              setAnswer(currentAnswer);
-            } else if (data.type === 'done') {
+                if (data.type === 'sources') {
+                  // Set sources when received
+                  setSources(data.data.sources);
+                } else if (data.type === 'token') {
+                  // Append each token to answer
+                  currentAnswer += data.data;
+                  setAnswer(currentAnswer);
+                } else if (data.type === 'done') {
+                  console.log('Stream complete');
+                }
+              }
+            } catch (parseErr) {
+              console.warn('Failed to parse SSE line:', line, parseErr);
+              // Continue processing other lines
+            }
+          }
+        }
+      }
+
+      // Process any remaining buffered line
+      if (buffer.startsWith('data: ')) {
+        try {
+          const jsonStr = buffer.slice(6).trim();
+          if (jsonStr) {
+            const data = JSON.parse(jsonStr);
+            if (data.type === 'done') {
               console.log('Stream complete');
             }
           }
+        } catch (parseErr) {
+          console.warn('Failed to parse final buffered line:', parseErr);
         }
       }
     } catch (err) {
