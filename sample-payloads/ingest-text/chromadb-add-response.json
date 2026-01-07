@@ -1,0 +1,6 @@
+{
+  "status_code": 201,
+  "status": "Created",
+  "body": {},
+  "note": "ChromaDB returns 201 Created with an empty response body when documents are successfully added."
+}

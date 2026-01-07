@@ -1,0 +1,37 @@
+{
+  "endpoint": "POST http://localhost:8001/api/v2/tenants/default_tenant/databases/default_database/collections/21d85e14-14a1-4f1c-9f81-f89bb0ae9b12/add",
+  "note": "This shows the actual request sent to ChromaDB. Embeddings are generated using Ollama nomic-embed-text model (768 dimensions).",
+  "payload": {
+    "ids": [
+      "1c9f4fe0-76bf-49ee-8023-88e33e9406c1",
+      "4c699dd2-c35b-45ef-8f1d-487df3ccce52",
+      "c2167599-6de1-4488-a542-52ce07292552"
+    ],
+    "embeddings": "[3 embeddings of dimension 768]",
+    "documents": [
+      "Roadster (2005–2009)\nMain article: Tesla Roadster (first generation)\nElon Musk took an active role within the company, but was not deeply involved in day-to-day business operations.[20] The company's strategy was to start with a premium sports car aimed at early adopters and then move into more mainstream vehicles, including sedans and affordable compacts.[21]\n\nIn February 2005, Musk led Tesla's Series B venture capital funding round of $13 million, which added Valor Equity Partners to the funding team.[22][17] Musk co-led the third, $40 million round in May 2006 which saw investment from prominent entrepreneurs including Google co-founders Sergey Brin and Larry Page, and former eBay president Jeff Skoll.[23] A fourth round worth $45 million in May 2007 brought the total private financing investment to over $105 million.[23]",
+      "In August 2007, Eberhard was asked by the board, led by Musk, to step down as CEO.[24] Eberhard then took the title of \"President of Technology\" before ultimately leaving the company in January 2008. Co-founder Marc Tarpenning, who served as the Vice President of Electrical Engineering of the company, also left the company in January 2008.[25] In August 2007, Michael Marks was brought in as interim CEO, and in December 2007, Ze'ev Drori became CEO and president.[26] Musk succeeded Drori as CEO in October 2008.[26] In June 2009, Eberhard filed a lawsuit against Musk for allegedly forcing him out.[27] The case was dismissed in August 2009.[28]\n\nTesla began production of the Roadster in 2008 inside the service bays of a former Chevrolet dealership in Menlo Park.[29][30] By January 2009, Tesla had raised $187 million and delivered 147 cars. Musk had contributed $70 million of his money to the company.[31]",
+      "In October 2009, Daimler AG, maker of Mercedes-Benz, acquired an equity stake of less than 10% in Tesla for a reported $50 million.[32][33] As part of the deal, Herbert Kohler, Vice President of the E-Drive and future Mobility group research group at Daimler, took a seat on the Tesla board.[34]"
+    ],
+    "metadatas": [
+      {
+        "chunk_index": 0,
+        "total_chunks": 3,
+        "ingestion_time": "2026-01-06T16:38:03.120516",
+        "source": "text_input"
+      },
+      {
+        "chunk_index": 1,
+        "total_chunks": 3,
+        "ingestion_time": "2026-01-06T16:38:03.120516",
+        "source": "text_input"
+      },
+      {
+        "chunk_index": 2,
+        "total_chunks": 3,
+        "ingestion_time": "2026-01-06T16:38:03.120516",
+        "source": "text_input"
+      }
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "message": "Successfully ingested 3 chunks",
+  "collection_name": "knowledge_base",
+  "num_chunks": 3,
+  "document_ids": [
+    "1c9f4fe0-76bf-49ee-8023-88e33e9406c1",
+    "4c699dd2-c35b-45ef-8f1d-487df3ccce52",
+    "c2167599-6de1-4488-a542-52ce07292552"
+  ]
+}

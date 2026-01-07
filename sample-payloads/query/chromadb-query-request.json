@@ -1,0 +1,12 @@
+{
+  "endpoint": "POST http://localhost:8001/api/v2/tenants/default_tenant/databases/default_database/collections/21d85e14-14a1-4f1c-9f81-f89bb0ae9b12/query",
+  "note": "This shows the actual request sent to ChromaDB. Query embedding is generated using Ollama nomic-embed-text model (768 dimensions).",
+  "payload": {
+    "query_embeddings": "[768 dimensional embedding vector]",
+    "n_results": 3,
+    "include": [
+      "documents",
+      "metadatas"
+    ]
+  }
+}

@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import get_chroma_client, get_ollama_llm, get_allowed_origins
 from api.health import create_health_router
 from api.query import create_query_router
+from api.query_enhanced import create_enhanced_query_router
 from api.collections import create_collections_router
 from api.ingest import create_ingest_router
 
@@ -42,12 +43,14 @@ llm = get_ollama_llm()
 # Create and include routers
 health_router = create_health_router(chroma_client, llm)
 query_router = create_query_router(chroma_client, llm)
+enhanced_query_router = create_enhanced_query_router(chroma_client, llm)
 collections_router = create_collections_router(chroma_client)
 ingest_router = create_ingest_router(chroma_client)
 
 # Include routers in the app
 app.include_router(health_router, tags=["Health"])
-app.include_router(query_router, prefix="/api", tags=["Query"])
+app.include_router(query_router, prefix="/api", tags=["Query (Basic)"])
+app.include_router(enhanced_query_router, prefix="/api", tags=["Query (Enhanced - Streaming & Caching)"])
 app.include_router(collections_router, prefix="/api", tags=["Collections"])
 app.include_router(ingest_router, prefix="/api", tags=["Ingestion"])
 
@@ -65,10 +68,18 @@ async def root():
         "endpoints": {
             "health": "/health",
             "query": "/api/query",
+            "query_stream": "/api/query/stream",
+            "cache_stats": "/api/cache/stats",
+            "cache_clear": "/api/cache",
             "collections": "/api/collections",
             "ingest_text": "/api/ingest/text",
             "ingest_file": "/api/ingest/file",
             "create_collection": "/api/collections/create"
+        },
+        "features": {
+            "streaming": "Use /api/query/stream for real-time token-by-token responses",
+            "caching": "Responses cached for 1 hour (100 max entries)",
+            "quantized_model": "Using llama2:7b-chat-q4_0 for 2-3x faster inference"
         }
     }
 
