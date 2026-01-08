@@ -83,36 +83,44 @@ def create_enhanced_query_router(chroma_client, llm):
 
     async def stream_llm_response(prompt: str) -> AsyncGenerator[str, None]:
         """Stream LLM response token by token."""
+        import asyncio
         import requests
 
-        try:
-            ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-            ollama_model = os.getenv("OLLAMA_MODEL", "llama2:7b-chat-q4_0")
+        def _sync_stream():
+            """Synchronous generator for streaming from Ollama."""
+            try:
+                ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+                ollama_model = os.getenv("OLLAMA_MODEL", "llama2:7b-chat-q4_0")
 
-            # Use tuple for separate connect and read timeouts
-            # Connect timeout: 10s, Read timeout: 600s (10 minutes for long responses)
-            response = requests.post(
-                f"{ollama_host}/api/generate",
-                json={
-                    "model": ollama_model,
-                    "prompt": prompt,
-                    "stream": True
-                },
-                stream=True,
-                timeout=(10, 600)
-            )
-            response.raise_for_status()
+                # Use tuple for separate connect and read timeouts
+                # Connect timeout: 10s, Read timeout: 600s (10 minutes for long responses)
+                response = requests.post(
+                    f"{ollama_host}/api/generate",
+                    json={
+                        "model": ollama_model,
+                        "prompt": prompt,
+                        "stream": True
+                    },
+                    stream=True,
+                    timeout=(10, 600)
+                )
+                response.raise_for_status()
 
-            for line in response.iter_lines():
-                if line:
-                    data = json.loads(line)
-                    if 'response' in data:
-                        yield data['response']
-                    if data.get('done', False):
-                        break
-        except Exception as e:
-            logger.error(f"Error streaming LLM response: {e}")
-            yield f"[Error: {str(e)}]"
+                for line in response.iter_lines():
+                    if line:
+                        data = json.loads(line)
+                        if 'response' in data:
+                            yield data['response']
+                        if data.get('done', False):
+                            break
+            except Exception as e:
+                logger.error(f"Error streaming LLM response: {e}")
+                yield f"[Error: {str(e)}]"
+
+        # Yield tokens from synchronous generator, with async sleep to allow event loop to process
+        for token in _sync_stream():
+            yield token
+            await asyncio.sleep(0)  # Yield control to event loop
 
     @router.post("/query", response_model=QueryResponse)
     async def query_rag(request: QueryRequest):
