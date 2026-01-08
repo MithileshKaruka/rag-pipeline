@@ -2,11 +2,19 @@
 Configuration and initialization for ChromaDB and Ollama clients
 """
 
-import os
 import logging
 from dotenv import load_dotenv
 import chromadb
 from langchain_community.llms import Ollama
+
+from constants import (
+    CHROMA_HOST,
+    CHROMA_PORT,
+    OLLAMA_HOST,
+    OLLAMA_MODEL,
+    OLLAMA_DEFAULT_KEEP_ALIVE,
+    ALLOWED_ORIGINS
+)
 
 # Load environment variables
 load_dotenv()
@@ -26,11 +34,8 @@ def get_chroma_client():
     try:
         # ChromaDB HttpClient for version 0.5+
         # We bypass buggy client methods (list_collections, get_collection) with direct API calls
-        host = os.getenv("CHROMA_HOST", "localhost")
-        port = int(os.getenv("CHROMA_PORT", "8001"))
-
-        client = chromadb.HttpClient(host=host, port=port)
-        logger.info(f"ChromaDB client initialized at {host}:{port}")
+        client = chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
+        logger.info(f"ChromaDB client initialized at {CHROMA_HOST}:{CHROMA_PORT}")
         return client
     except Exception as e:
         logger.error(f"Failed to initialize ChromaDB client: {e}")
@@ -46,10 +51,12 @@ def get_ollama_llm():
     """
     try:
         llm = Ollama(
-            base_url=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
-            model=os.getenv("OLLAMA_MODEL", "llama2:7b-chat-q4_0")
+            base_url=OLLAMA_HOST,
+            model=OLLAMA_MODEL,
+            keep_alive=OLLAMA_DEFAULT_KEEP_ALIVE
         )
-        logger.info(f"Ollama LLM initialized with model: {os.getenv('OLLAMA_MODEL', 'llama2:7b-chat-q4_0')}")
+        logger.info(f"Ollama LLM initialized with model: {OLLAMA_MODEL}")
+        logger.info(f"Keep-alive: {OLLAMA_DEFAULT_KEEP_ALIVE}")
         return llm
     except Exception as e:
         logger.error(f"Failed to initialize Ollama LLM: {e}")
@@ -63,4 +70,4 @@ def get_allowed_origins():
     Returns:
         List of allowed origins
     """
-    return os.getenv("ALLOWED_ORIGINS", "*").split(",")
+    return ALLOWED_ORIGINS.split(",")

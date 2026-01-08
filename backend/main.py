@@ -4,12 +4,26 @@ FastAPI application that provides RAG (Retrieval Augmented Generation) functiona
 using ChromaDB for vector storage and Ollama for LLM inference.
 """
 
-import os
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from constants import (
+    API_TITLE,
+    API_DESCRIPTION,
+    API_VERSION,
+    ENVIRONMENT,
+    OLLAMA_HOST,
+    OLLAMA_MODEL,
+    CHROMA_HOST,
+    CHROMA_PORT,
+    BACKEND_HOST,
+    BACKEND_PORT,
+    CACHE_TTL_SECONDS,
+    CACHE_MAX_SIZE
+)
 from config import get_chroma_client, get_ollama_llm, get_allowed_origins
+from model_warmup import warmup_ollama_model
 from api.health import create_health_router
 # from api.query import create_query_router  # Replaced by enhanced version
 from api.query_enhanced import create_enhanced_query_router
@@ -22,9 +36,9 @@ logger = logging.getLogger(__name__)
 
 # Initialize FastAPI application
 app = FastAPI(
-    title="RAG API",
-    description="Retrieval Augmented Generation API using Ollama and ChromaDB",
-    version="1.0.0"
+    title=API_TITLE,
+    description=API_DESCRIPTION,
+    version=API_VERSION
 )
 
 # CORS Configuration
@@ -53,6 +67,17 @@ app.include_router(collections_router, prefix="/api", tags=["Collections"])
 app.include_router(ingest_router, prefix="/api", tags=["Ingestion"])
 
 
+# Startup event to warm up Ollama model
+@app.on_event("startup")
+async def warmup_ollama():
+    """
+    Warm up Ollama model on backend startup.
+    This loads the model into memory to reduce first query latency.
+    See model_warmup.py for implementation details.
+    """
+    await warmup_ollama_model(llm)
+
+
 # Root endpoint
 @app.get("/", response_model=dict)
 async def root():
@@ -60,8 +85,8 @@ async def root():
     Root endpoint - API information
     """
     return {
-        "name": "RAG API",
-        "version": "1.0.0",
+        "name": API_TITLE,
+        "version": API_VERSION,
         "status": "running",
         "endpoints": {
             "health": "/health",
@@ -76,8 +101,8 @@ async def root():
         },
         "features": {
             "streaming": "Use /api/query/stream for real-time token-by-token responses",
-            "caching": "Responses cached for 1 hour (100 max entries)",
-            "quantized_model": "Using llama2:7b-chat-q4_0 for 2-3x faster inference"
+            "caching": f"Responses cached for {CACHE_TTL_SECONDS // 3600} hour (max {CACHE_MAX_SIZE} entries)",
+            "quantized_model": f"Using {OLLAMA_MODEL} for 2-3x faster inference"
         }
     }
 
@@ -109,10 +134,10 @@ async def startup_event():
     """
     logger.info("=" * 50)
     logger.info("RAG API Starting Up")
-    logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'development')}")
-    logger.info(f"Ollama Host: {os.getenv('OLLAMA_HOST')}")
-    logger.info(f"Ollama Model: {os.getenv('OLLAMA_MODEL')}")
-    logger.info(f"ChromaDB: {os.getenv('CHROMA_HOST')}:{os.getenv('CHROMA_PORT')}")
+    logger.info(f"Environment: {ENVIRONMENT}")
+    logger.info(f"Ollama Host: {OLLAMA_HOST}")
+    logger.info(f"Ollama Model: {OLLAMA_MODEL}")
+    logger.info(f"ChromaDB: {CHROMA_HOST}:{CHROMA_PORT}")
     logger.info("=" * 50)
 
 
@@ -128,13 +153,10 @@ async def shutdown_event():
 if __name__ == "__main__":
     import uvicorn
 
-    host = os.getenv("BACKEND_HOST", "0.0.0.0")
-    port = int(os.getenv("BACKEND_PORT", "8000"))
-
     uvicorn.run(
         "main:app",
-        host=host,
-        port=port,
-        reload=True if os.getenv("ENVIRONMENT") == "development" else False,
+        host=BACKEND_HOST,
+        port=BACKEND_PORT,
+        reload=True if ENVIRONMENT == "development" else False,
         log_level="info"
     )
