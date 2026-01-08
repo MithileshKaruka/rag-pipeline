@@ -182,9 +182,7 @@ def create_ingest_router(chroma_client):
                 )
 
             # Direct API call to add documents
-            chroma_host = os.getenv("CHROMA_HOST", "localhost")
-            chroma_port = os.getenv("CHROMA_PORT", "8001")
-            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_id}/add"
+            url = f"http://{CHROMA_HOST}:{CHROMA_PORT}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_id}/add"
 
             # Prepare add request with embeddings
             add_body = {

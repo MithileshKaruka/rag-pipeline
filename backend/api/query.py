@@ -4,10 +4,10 @@ Query API endpoints for RAG retrieval
 
 import logging
 import httpx
-import os
 from fastapi import APIRouter, HTTPException
 
 from models import QueryRequest, QueryResponse, SourceDocument
+from constants import CHROMA_HOST, CHROMA_PORT, OLLAMA_HOST, OLLAMA_MODEL, OLLAMA_EMBEDDING_MODEL
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -28,9 +28,7 @@ def create_query_router(chroma_client, llm):
     async def get_collection_id(collection_name: str) -> str:
         """Get collection UUID by name via direct API call."""
         try:
-            chroma_host = os.getenv("CHROMA_HOST", "localhost")
-            chroma_port = os.getenv("CHROMA_PORT", "8001")
-            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections"
+            url = f"http://{CHROMA_HOST}:{CHROMA_PORT}/api/v2/tenants/default_tenant/databases/default_database/collections"
 
             async with httpx.AsyncClient() as http_client:
                 response = await http_client.get(url)
@@ -51,11 +49,10 @@ def create_query_router(chroma_client, llm):
         import requests
 
         try:
-            ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
             response = requests.post(
-                f"{ollama_host}/api/embeddings",
+                f"{OLLAMA_HOST}/api/embeddings",
                 json={
-                    "model": "nomic-embed-text",
+                    "model": OLLAMA_EMBEDDING_MODEL,
                     "prompt": query_text
                 },
                 timeout=30  # Add timeout to prevent hanging
@@ -122,9 +119,7 @@ def create_query_router(chroma_client, llm):
 
             # Step 3: Perform similarity search via direct API call
             logger.info(f"Searching for: {request.question}")
-            chroma_host = os.getenv("CHROMA_HOST", "localhost")
-            chroma_port = os.getenv("CHROMA_PORT", "8001")
-            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_id}/query"
+            url = f"http://{CHROMA_HOST}:{CHROMA_PORT}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_id}/query"
 
             query_body = {
                 "query_embeddings": [query_embedding],
@@ -200,7 +195,7 @@ Answer:"""
             query_response = QueryResponse(
                 answer=response.strip(),
                 sources=sources,
-                model_used=os.getenv("OLLAMA_MODEL", "llama2:7b-chat-q4_0")
+                model_used=OLLAMA_MODEL
             )
 
             # Log final response
