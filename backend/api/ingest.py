@@ -26,11 +26,11 @@ Benefits:
 
 import logging
 import httpx
-import os
 from fastapi import APIRouter, HTTPException, UploadFile, File
 
 from models import IngestTextRequest, IngestResponse
 from utils import chunk_text, chunk_markdown_text, generate_document_ids, create_chunk_metadata, validate_file_extension
+from constants import CHROMA_HOST, CHROMA_PORT, OLLAMA_HOST, OLLAMA_EMBEDDING_MODEL
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -53,9 +53,7 @@ def create_ingest_router(chroma_client):
         Returns collection ID if exists, None otherwise.
         """
         try:
-            chroma_host = os.getenv("CHROMA_HOST", "localhost")
-            chroma_port = os.getenv("CHROMA_PORT", "8001")
-            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections"
+            url = f"http://{CHROMA_HOST}:{CHROMA_PORT}/api/v2/tenants/default_tenant/databases/default_database/collections"
 
             async with httpx.AsyncClient() as http_client:
                 response = await http_client.get(url)
@@ -85,9 +83,7 @@ def create_ingest_router(chroma_client):
         The server will use this embedding function to auto-generate embeddings.
         """
         try:
-            chroma_host = os.getenv("CHROMA_HOST", "localhost")
-            chroma_port = os.getenv("CHROMA_PORT", "8001")
-            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections"
+            url = f"http://{CHROMA_HOST}:{CHROMA_PORT}/api/v2/tenants/default_tenant/databases/default_database/collections"
 
             # Configure collection to use default embedding function
             # ChromaDB will then auto-generate embeddings server-side
@@ -120,11 +116,10 @@ def create_ingest_router(chroma_client):
 
         def generate_single_embedding(doc: str) -> list:
             """Generate embedding for a single document."""
-            ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
             response = requests.post(
-                f"{ollama_host}/api/embeddings",
+                f"{OLLAMA_HOST}/api/embeddings",
                 json={
-                    "model": "nomic-embed-text",
+                    "model": OLLAMA_EMBEDDING_MODEL,
                     "prompt": doc
                 },
                 timeout=30

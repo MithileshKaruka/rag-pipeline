@@ -4,7 +4,6 @@ Enhanced Query API endpoints with streaming and caching
 
 import logging
 import httpx
-import os
 import hashlib
 import json
 from fastapi import APIRouter, HTTPException
@@ -13,12 +12,24 @@ from cachetools import TTLCache
 from typing import AsyncGenerator
 
 from models import QueryRequest, QueryResponse, SourceDocument
+from constants import (
+    CHROMA_HOST,
+    CHROMA_PORT,
+    OLLAMA_HOST,
+    OLLAMA_MODEL,
+    OLLAMA_EMBEDDING_MODEL,
+    CACHE_TTL_SECONDS,
+    CACHE_MAX_SIZE,
+    CHROMA_TIMEOUT_SECONDS,
+    OLLAMA_CONNECT_TIMEOUT_SECONDS,
+    OLLAMA_READ_TIMEOUT_SECONDS
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Cache for storing query results (TTL: 1 hour, max 100 entries)
-query_cache = TTLCache(maxsize=100, ttl=3600)
+# Cache for storing query results
+query_cache = TTLCache(maxsize=CACHE_MAX_SIZE, ttl=CACHE_TTL_SECONDS)
 
 
 def create_enhanced_query_router(chroma_client, llm):
@@ -41,9 +52,7 @@ def create_enhanced_query_router(chroma_client, llm):
     async def get_collection_id(collection_name: str) -> str:
         """Get collection UUID by name via direct API call."""
         try:
-            chroma_host = os.getenv("CHROMA_HOST", "localhost")
-            chroma_port = os.getenv("CHROMA_PORT", "8001")
-            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections"
+            url = f"http://{CHROMA_HOST}:{CHROMA_PORT}/api/v2/tenants/default_tenant/databases/default_database/collections"
 
             async with httpx.AsyncClient() as http_client:
                 response = await http_client.get(url)
@@ -60,22 +69,21 @@ def create_enhanced_query_router(chroma_client, llm):
             return None
 
     def generate_query_embedding(query_text: str) -> list:
-        """Generate embedding for query using Ollama nomic-embed-text."""
+        """Generate embedding for query using Ollama embedding model."""
         import requests
 
         try:
-            ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
             response = requests.post(
-                f"{ollama_host}/api/embeddings",
+                f"{OLLAMA_HOST}/api/embeddings",
                 json={
-                    "model": "nomic-embed-text",
+                    "model": OLLAMA_EMBEDDING_MODEL,
                     "prompt": query_text
                 },
                 timeout=30
             )
             response.raise_for_status()
             embedding = response.json()["embedding"]
-            logger.info(f"Generated query embedding using nomic-embed-text")
+            logger.info(f"Generated query embedding using {OLLAMA_EMBEDDING_MODEL}")
             return embedding
         except Exception as e:
             logger.error(f"Error generating query embedding: {e}")
@@ -84,16 +92,15 @@ def create_enhanced_query_router(chroma_client, llm):
     async def stream_llm_response(prompt: str) -> AsyncGenerator[str, None]:
         """Stream LLM response token by token using async httpx."""
         try:
-            ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-            ollama_model = os.getenv("OLLAMA_MODEL", "llama2:7b-chat-q4_0")
-
             # Use httpx for true async streaming
-            async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=600.0)) as client:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(OLLAMA_CONNECT_TIMEOUT_SECONDS, read=OLLAMA_READ_TIMEOUT_SECONDS)
+            ) as client:
                 async with client.stream(
                     'POST',
-                    f"{ollama_host}/api/generate",
+                    f"{OLLAMA_HOST}/api/generate",
                     json={
-                        "model": ollama_model,
+                        "model": OLLAMA_MODEL,
                         "prompt": prompt,
                         "stream": True
                     }
@@ -178,9 +185,7 @@ def create_enhanced_query_router(chroma_client, llm):
 
             # Step 3: Perform similarity search via direct API call
             logger.info(f"Searching for: {request.question}")
-            chroma_host = os.getenv("CHROMA_HOST", "localhost")
-            chroma_port = os.getenv("CHROMA_PORT", "8001")
-            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_id}/query"
+            url = f"http://{CHROMA_HOST}:{CHROMA_PORT}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_id}/query"
 
             query_body = {
                 "query_embeddings": [query_embedding],
@@ -256,7 +261,7 @@ Answer:"""
             query_response = QueryResponse(
                 answer=response_text.strip(),
                 sources=sources,
-                model_used=os.getenv("OLLAMA_MODEL", "llama2:7b-chat-q4_0")
+                model_used=OLLAMA_MODEL
             )
 
             # Cache the response
@@ -325,9 +330,7 @@ Answer:"""
                 )
 
             # Step 3: Perform similarity search
-            chroma_host = os.getenv("CHROMA_HOST", "localhost")
-            chroma_port = os.getenv("CHROMA_PORT", "8001")
-            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_id}/query"
+            url = f"http://{CHROMA_HOST}:{CHROMA_PORT}/api/v2/tenants/default_tenant/databases/default_database/collections/{collection_id}/query"
 
             query_body = {
                 "query_embeddings": [query_embedding],
@@ -379,7 +382,7 @@ Answer:"""
                         }
                         for doc, meta in zip(documents, metadatas)
                     ],
-                    "model_used": os.getenv("OLLAMA_MODEL", "llama2:7b-chat-q4_0")
+                    "model_used": OLLAMA_MODEL
                 }
                 yield f"data: {json.dumps({'type': 'sources', 'data': sources_data})}\n\n"
 

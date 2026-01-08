@@ -2,11 +2,11 @@
 Health check API endpoints
 """
 
-import os
 import logging
 from fastapi import APIRouter
 
 from models import HealthResponse
+from constants import OLLAMA_MODEL
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -53,7 +53,7 @@ def create_health_router(chroma_client, llm):
             status="healthy" if (chromadb_connected and ollama_connected) else "degraded",
             chromadb_connected=chromadb_connected,
             ollama_connected=ollama_connected,
-            model=os.getenv("OLLAMA_MODEL", "llama2:7b-chat-q4_0")
+            model=OLLAMA_MODEL
         )
 
     return router

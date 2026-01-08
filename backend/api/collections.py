@@ -4,11 +4,11 @@ Collection management API endpoints
 
 import logging
 import httpx
-import os
 from typing import List
 from fastapi import APIRouter, HTTPException
 
 from models import CreateCollectionRequest
+from constants import CHROMA_HOST, CHROMA_PORT
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -38,11 +38,9 @@ def create_collections_router(chroma_client):
 
         try:
             # Get ChromaDB connection details from client
-            chroma_host = os.getenv("CHROMA_HOST", "localhost")
-            chroma_port = os.getenv("CHROMA_PORT", "8001")
 
             # Call ChromaDB v2 API directly (v1 returns 410 Gone)
-            url = f"http://{chroma_host}:{chroma_port}/api/v2/tenants/default_tenant/databases/default_database/collections"
+            url = f"http://{CHROMA_HOST}:{CHROMA_PORT}/api/v2/tenants/default_tenant/databases/default_database/collections"
 
             async with httpx.AsyncClient() as client:
                 response = await client.get(url)
@@ -78,8 +76,6 @@ def create_collections_router(chroma_client):
 
         try:
             # Get ChromaDB connection details
-            chroma_host = os.getenv("CHROMA_HOST", "localhost")
-            chroma_port = os.getenv("CHROMA_PORT", "8001")
 
             # Check if collection already exists by calling API directly
             # ChromaDB 0.5.23 uses v2 API
