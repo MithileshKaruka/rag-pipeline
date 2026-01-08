@@ -461,6 +461,7 @@ function App() {
                   {answer}
                   {queryLoading && useStreaming && <span className="streaming-cursor">▊</span>}
                 </div>
+                {console.log('RENDERING ANSWER SECTION, answer length:', answer.length)}
 
                 {/* Source Documents */}
                 {sources && sources.length > 0 && (
