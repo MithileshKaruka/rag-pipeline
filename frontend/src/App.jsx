@@ -348,6 +348,21 @@ function App() {
         <span className="status-dot" style={{ backgroundColor: statusColor }}></span>
         <span>Backend: {healthStatus.status}</span>
         {healthStatus.model && <span className="model-badge">Model: {healthStatus.model}</span>}
+        {healthStatus.chromadb_connected !== undefined && (
+          <span className="service-badge" style={{ color: healthStatus.chromadb_connected ? '#4caf50' : '#f44336' }}>
+            ChromaDB: {healthStatus.chromadb_connected ? '✓' : '✗'}
+          </span>
+        )}
+        {healthStatus.ollama_connected !== undefined && (
+          <span className="service-badge" style={{ color: healthStatus.ollama_connected ? '#4caf50' : '#888' }}>
+            Ollama: {healthStatus.ollama_connected ? '✓' : '✗'}
+          </span>
+        )}
+        {healthStatus.bedrock_connected !== undefined && (
+          <span className="service-badge" style={{ color: healthStatus.bedrock_connected ? '#4caf50' : '#888' }}>
+            Bedrock: {healthStatus.bedrock_connected ? '✓' : '✗'}
+          </span>
+        )}
       </div>
     );
   };
