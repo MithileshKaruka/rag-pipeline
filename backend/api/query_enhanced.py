@@ -18,6 +18,8 @@ from constants import (
     OLLAMA_HOST,
     OLLAMA_MODEL,
     OLLAMA_EMBEDDING_MODEL,
+    EMBEDDING_PROVIDER,
+    BEDROCK_EMBEDDING_MODEL,
     CACHE_TTL_SECONDS,
     CACHE_MAX_SIZE,
     CHROMA_TIMEOUT_SECONDS,
@@ -240,9 +242,17 @@ def create_enhanced_query_router(chroma_client, llm):
                     detail=f"Collection '{request.collection_name}' not found"
                 )
 
-            # Step 2: Generate embedding for query with selected provider
+            # Step 2: Generate embedding for query with EMBEDDING_PROVIDER
+            # IMPORTANT: Always use EMBEDDING_PROVIDER for query embeddings to match ingestion embeddings
+            # The LLM provider (provider variable) is used for text generation only
             import asyncio
             from concurrent.futures import ThreadPoolExecutor
+
+            # Determine embedding provider and model
+            embedding_provider = EMBEDDING_PROVIDER.lower()
+            query_embedding_model = BEDROCK_EMBEDDING_MODEL if embedding_provider == "bedrock" else OLLAMA_EMBEDDING_MODEL
+
+            logger.info(f"Using embedding provider for query: {embedding_provider} (model: {query_embedding_model})")
 
             loop = asyncio.get_event_loop()
             with ThreadPoolExecutor() as pool:
@@ -250,8 +260,8 @@ def create_enhanced_query_router(chroma_client, llm):
                     pool,
                     generate_query_embedding,
                     request.question,
-                    provider,
-                    embedding_model
+                    embedding_provider,
+                    query_embedding_model
                 )
 
             # Step 3: Perform similarity search

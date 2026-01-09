@@ -27,7 +27,8 @@ EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", EMBEDDING_PROVIDER_DEFAULT)
 
 OLLAMA_DEFAULT_HOST = "http://localhost:11434"
 OLLAMA_DEFAULT_MODEL = "qwen2.5:0.5b"
-OLLAMA_DEFAULT_EMBEDDING_MODEL = "nomic-embed-text"
+# Note: Ollama embedding model is not used by default - EMBEDDING_PROVIDER defaults to Bedrock Titan
+OLLAMA_DEFAULT_EMBEDDING_MODEL = "nomic-embed-text"  # Only for reference if EMBEDDING_PROVIDER=ollama
 OLLAMA_DEFAULT_KEEP_ALIVE = "24h"
 
 # Get from environment or use defaults
