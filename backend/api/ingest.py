@@ -79,28 +79,30 @@ def create_ingest_router(chroma_client):
 
     async def create_collection_direct(collection_name: str, metadata: dict = None) -> dict:
         """
-        Create a collection via direct API call with embedding function configured.
-        The server will use this embedding function to auto-generate embeddings.
+        Create a collection via direct API call.
+        Uses minimal configuration - embeddings will be provided explicitly during add operations.
         """
         try:
             url = f"http://{CHROMA_HOST}:{CHROMA_PORT}/api/v2/tenants/default_tenant/databases/default_database/collections"
 
-            # Configure collection to use default embedding function
-            # ChromaDB will then auto-generate embeddings server-side
+            # Minimal collection configuration
+            # We provide embeddings explicitly during add operations
             payload = {
                 "name": collection_name,
-                "metadata": metadata or {},
-                "configuration": {
-                    "hnsw_configuration": {
-                        "space": "cosine"
-                    }
-                }
+                "metadata": metadata or {}
             }
+
+            logger.info(f"Creating collection '{collection_name}' with payload: {payload}")
 
             async with httpx.AsyncClient() as http_client:
                 response = await http_client.post(url, json=payload)
                 response.raise_for_status()
-                return response.json()
+                result = response.json()
+                logger.info(f"Collection created successfully: {result}")
+                return result
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error creating collection: {e.response.status_code} - {e.response.text}")
+            raise
         except Exception as e:
             logger.error(f"Error creating collection via API: {e}")
             raise
