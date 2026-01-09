@@ -87,10 +87,14 @@ def create_ingest_router(chroma_client):
 
             # Minimal collection configuration
             # We provide embeddings explicitly during add operations
+            # ChromaDB v2 doesn't allow empty metadata, so only include if provided
             payload = {
-                "name": collection_name,
-                "metadata": metadata or {}
+                "name": collection_name
             }
+
+            # Only add metadata if it's not empty
+            if metadata:
+                payload["metadata"] = metadata
 
             logger.info(f"Creating collection '{collection_name}' with payload: {payload}")
 
