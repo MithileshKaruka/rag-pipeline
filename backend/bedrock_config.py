@@ -18,10 +18,19 @@ from constants import (
     BEDROCK_EMBEDDING_MODEL,
     AWS_ACCESS_KEY_ID,
     AWS_SECRET_ACCESS_KEY,
-    AWS_SESSION_TOKEN
+    AWS_SESSION_TOKEN,
+    BEDROCK_DAILY_LIMIT_USD,
+    BEDROCK_REQUESTS_PER_MINUTE
 )
+from rate_limiter import get_rate_limiter
 
 logger = logging.getLogger(__name__)
+
+# Initialize rate limiter
+rate_limiter = get_rate_limiter(
+    daily_limit_usd=BEDROCK_DAILY_LIMIT_USD,
+    requests_per_minute=BEDROCK_REQUESTS_PER_MINUTE
+)
 
 
 def get_bedrock_client():
@@ -81,7 +90,7 @@ def get_bedrock_client():
 
 def invoke_bedrock_llm(client, prompt: str, max_tokens: int = 2048) -> Optional[str]:
     """
-    Invoke Bedrock LLM model synchronously (non-streaming).
+    Invoke Bedrock LLM model synchronously (non-streaming) with rate limiting.
 
     Args:
         client: Bedrock runtime client
@@ -92,6 +101,20 @@ def invoke_bedrock_llm(client, prompt: str, max_tokens: int = 2048) -> Optional[
         Generated text or None if invocation fails
     """
     try:
+        # Estimate input tokens (rough estimate: 1 token ≈ 4 characters)
+        estimated_input_tokens = len(prompt) // 4
+
+        # Check rate limit before making API call
+        is_allowed, reason = rate_limiter.check_and_increment(
+            model_type="llama3-2-3b",
+            estimated_input_tokens=estimated_input_tokens,
+            estimated_output_tokens=max_tokens  # Worst case: full output
+        )
+
+        if not is_allowed:
+            logger.error(f"Bedrock LLM request blocked by rate limiter: {reason}")
+            raise Exception(f"Rate limit exceeded: {reason}")
+
         # Prepare request body based on model type
         if "claude" in BEDROCK_MODEL.lower():
             # Claude 3 models use Messages API
@@ -153,7 +176,7 @@ def invoke_bedrock_llm(client, prompt: str, max_tokens: int = 2048) -> Optional[
 
 async def stream_bedrock_llm(client, prompt: str, max_tokens: int = 2048) -> AsyncGenerator[str, None]:
     """
-    Stream Bedrock LLM response token by token.
+    Stream Bedrock LLM response token by token with rate limiting.
 
     Args:
         client: Bedrock runtime client
@@ -164,6 +187,21 @@ async def stream_bedrock_llm(client, prompt: str, max_tokens: int = 2048) -> Asy
         Generated tokens as they arrive
     """
     try:
+        # Estimate input tokens (rough estimate: 1 token ≈ 4 characters)
+        estimated_input_tokens = len(prompt) // 4
+
+        # Check rate limit before making API call
+        is_allowed, reason = rate_limiter.check_and_increment(
+            model_type="llama3-2-3b",
+            estimated_input_tokens=estimated_input_tokens,
+            estimated_output_tokens=max_tokens  # Worst case: full output
+        )
+
+        if not is_allowed:
+            logger.error(f"Bedrock streaming request blocked by rate limiter: {reason}")
+            yield f"[Error: Rate limit exceeded - {reason}]"
+            return
+
         # Prepare request body for streaming
         if "claude" in BEDROCK_MODEL.lower():
             body = {
@@ -237,7 +275,7 @@ async def stream_bedrock_llm(client, prompt: str, max_tokens: int = 2048) -> Asy
 
 def generate_bedrock_embedding(client, text: str) -> Optional[list]:
     """
-    Generate embeddings using Bedrock embedding model.
+    Generate embeddings using Bedrock embedding model with rate limiting.
 
     Args:
         client: Bedrock runtime client
@@ -247,6 +285,20 @@ def generate_bedrock_embedding(client, text: str) -> Optional[list]:
         Embedding vector as list of floats, or None if generation fails
     """
     try:
+        # Estimate tokens (rough estimate: 1 token ≈ 4 characters for English)
+        estimated_tokens = len(text) // 4
+
+        # Check rate limit before making API call
+        is_allowed, reason = rate_limiter.check_and_increment(
+            model_type="titan-embed-v2",
+            estimated_input_tokens=estimated_tokens,
+            estimated_output_tokens=0  # Embeddings don't have output tokens
+        )
+
+        if not is_allowed:
+            logger.error(f"Bedrock embedding request blocked by rate limiter: {reason}")
+            raise Exception(f"Rate limit exceeded: {reason}")
+
         # Prepare request body for embedding
         body = {
             "inputText": text
@@ -266,6 +318,14 @@ def generate_bedrock_embedding(client, text: str) -> Optional[list]:
 
         if embedding:
             logger.info(f"Generated embedding using {BEDROCK_EMBEDDING_MODEL} ({len(embedding)} dimensions)")
+
+            # Record actual usage (embeddings use input tokens only)
+            rate_limiter.record_actual_usage(
+                model_type="titan-embed-v2",
+                actual_input_tokens=estimated_tokens,
+                actual_output_tokens=0
+            )
+
             return embedding
         else:
             logger.error("No embedding found in response")

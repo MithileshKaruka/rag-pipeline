@@ -32,6 +32,7 @@ from api.query_enhanced import create_enhanced_query_router
 from api.collections import create_collections_router
 from api.ingest import create_ingest_router
 from api.models_api import create_models_router
+from api.rate_limit_api import create_rate_limit_router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -63,6 +64,7 @@ query_router = create_enhanced_query_router(chroma_client, llm)  # Using enhance
 collections_router = create_collections_router(chroma_client)
 ingest_router = create_ingest_router(chroma_client)
 models_router = create_models_router()
+rate_limit_router = create_rate_limit_router()
 
 # Include routers in the app
 app.include_router(health_router, tags=["Health"])
@@ -70,6 +72,7 @@ app.include_router(query_router, prefix="/api", tags=["Query"])
 app.include_router(collections_router, prefix="/api", tags=["Collections"])
 app.include_router(ingest_router, prefix="/api", tags=["Ingestion"])
 app.include_router(models_router, prefix="/api", tags=["Models"])
+app.include_router(rate_limit_router, prefix="/api", tags=["Rate Limiting"])
 
 
 # Startup logging

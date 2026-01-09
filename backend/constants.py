@@ -55,6 +55,10 @@ AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_SESSION_TOKEN = os.getenv("AWS_SESSION_TOKEN")  # Required for temporary credentials
 
+# AWS Bedrock Rate Limiting
+BEDROCK_DAILY_LIMIT_USD = float(os.getenv("BEDROCK_DAILY_LIMIT_USD", "1.0"))  # $1.00 per day default
+BEDROCK_REQUESTS_PER_MINUTE = int(os.getenv("BEDROCK_REQUESTS_PER_MINUTE", "100"))  # 100 req/min default
+
 # ============================================================================
 # CHROMADB CONFIGURATION
 # ============================================================================
