@@ -177,6 +177,7 @@ body {
 }
 
 .collection-select,
+.model-select,
 .text-input {
   width: 100%;
   padding: 0.75rem;
@@ -189,6 +190,7 @@ body {
 }
 
 .collection-select:focus,
+.model-select:focus,
 .text-input:focus {
   outline: none;
   border-color: var(--primary-color);

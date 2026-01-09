@@ -32,6 +32,7 @@ class HealthResponse(BaseModel):
     status: str
     chromadb_connected: bool
     ollama_connected: bool
+    bedrock_connected: bool
     model: str
 
 
