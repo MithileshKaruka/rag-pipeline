@@ -30,7 +30,15 @@ from fastapi import APIRouter, HTTPException, UploadFile, File
 
 from models import IngestTextRequest, IngestResponse
 from utils import chunk_text, chunk_markdown_text, generate_document_ids, create_chunk_metadata, validate_file_extension
-from constants import CHROMA_HOST, CHROMA_PORT, OLLAMA_HOST, OLLAMA_EMBEDDING_MODEL
+from constants import (
+    CHROMA_HOST,
+    CHROMA_PORT,
+    OLLAMA_HOST,
+    OLLAMA_EMBEDDING_MODEL,
+    LLM_PROVIDER,
+    BEDROCK_REGION
+)
+from bedrock_config import get_bedrock_client, generate_bedrock_embedding
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -164,10 +172,90 @@ def create_ingest_router(chroma_client):
             logger.error(f"Error generating embeddings with Ollama: {e}")
             raise
 
-    async def add_documents_with_client_async(collection_name: str, documents: list, metadatas: list, ids: list):
+    def generate_embeddings_with_bedrock(documents: list) -> list:
         """
-        Add documents via direct API call with Ollama-generated embeddings.
-        Uses Ollama for embedding generation, then calls ChromaDB API directly.
+        Generate embeddings using AWS Bedrock Titan model.
+        Uses concurrent requests to speed up batch processing.
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        def generate_single_embedding(bedrock_client, doc: str) -> list:
+            """Generate embedding for a single document using Bedrock."""
+            embedding = generate_bedrock_embedding(bedrock_client, doc)
+            if embedding is None:
+                raise ValueError(f"Failed to generate embedding for document")
+            return embedding
+
+        try:
+            # Initialize Bedrock client
+            bedrock_client = get_bedrock_client()
+            if bedrock_client is None:
+                raise ValueError("Failed to initialize Bedrock client")
+
+            embeddings = []
+
+            # Use ThreadPoolExecutor to parallelize embedding generation
+            # Limit to 10 concurrent requests for Bedrock (it can handle more than Ollama)
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                # Submit all documents for embedding generation
+                future_to_index = {
+                    executor.submit(generate_single_embedding, bedrock_client, doc): i
+                    for i, doc in enumerate(documents)
+                }
+
+                # Create a list to store embeddings in order
+                embeddings = [None] * len(documents)
+
+                # Collect results as they complete
+                for future in as_completed(future_to_index):
+                    index = future_to_index[future]
+                    try:
+                        embedding = future.result()
+                        embeddings[index] = embedding
+                    except Exception as e:
+                        logger.error(f"Error generating embedding for document {index}: {e}")
+                        raise
+
+            logger.info(f"Generated embeddings for {len(documents)} documents using Bedrock Titan with parallel processing")
+            return embeddings
+        except Exception as e:
+            logger.error(f"Error generating embeddings with Bedrock: {e}")
+            raise
+
+    def generate_embeddings(documents: list, provider: str = None) -> list:
+        """
+        Generate embeddings using the appropriate provider (Ollama or Bedrock).
+
+        Args:
+            documents: List of text documents to embed
+            provider: Provider to use ('ollama' or 'bedrock'). If None, uses LLM_PROVIDER from constants.
+
+        Returns:
+            List of embedding vectors
+        """
+        if provider is None:
+            provider = LLM_PROVIDER.lower()
+
+        logger.info(f"Generating embeddings using provider: {provider}")
+
+        if provider == "bedrock":
+            return generate_embeddings_with_bedrock(documents)
+        elif provider == "ollama":
+            return generate_embeddings_with_ollama(documents)
+        else:
+            raise ValueError(f"Unsupported embedding provider: {provider}. Use 'ollama' or 'bedrock'.")
+
+    async def add_documents_with_client_async(collection_name: str, documents: list, metadatas: list, ids: list, provider: str = None):
+        """
+        Add documents via direct API call with provider-generated embeddings.
+        Uses Ollama or Bedrock for embedding generation, then calls ChromaDB API directly.
+
+        Args:
+            collection_name: Name of the collection to add documents to
+            documents: List of document texts
+            metadatas: List of metadata dicts for each document
+            ids: List of document IDs
+            provider: Embedding provider to use ('ollama' or 'bedrock'). If None, uses LLM_PROVIDER from constants.
         """
         import asyncio
         from concurrent.futures import ThreadPoolExecutor
@@ -178,13 +266,14 @@ def create_ingest_router(chroma_client):
             if not collection_id:
                 raise ValueError(f"Collection '{collection_name}' not found")
 
-            # Generate embeddings using Ollama in thread pool (blocking operation)
+            # Generate embeddings using specified provider in thread pool (blocking operation)
             loop = asyncio.get_event_loop()
             with ThreadPoolExecutor() as pool:
                 embeddings = await loop.run_in_executor(
                     pool,
-                    generate_embeddings_with_ollama,
-                    documents
+                    generate_embeddings,
+                    documents,
+                    provider
                 )
 
             # Direct API call to add documents
