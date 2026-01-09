@@ -8,11 +8,19 @@ All modules should import from this file rather than hardcoding values.
 import os
 
 # ============================================================================
+# LLM PROVIDER SELECTION
+# ============================================================================
+
+# Choose LLM provider: "ollama" or "bedrock"
+LLM_PROVIDER_DEFAULT = "ollama"
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", LLM_PROVIDER_DEFAULT)
+
+# ============================================================================
 # OLLAMA CONFIGURATION
 # ============================================================================
 
 OLLAMA_DEFAULT_HOST = "http://localhost:11434"
-OLLAMA_DEFAULT_MODEL = "llama2:7b-chat-q4_0"
+OLLAMA_DEFAULT_MODEL = "qwen2.5:0.5b"
 OLLAMA_DEFAULT_EMBEDDING_MODEL = "nomic-embed-text"
 OLLAMA_DEFAULT_KEEP_ALIVE = "24h"
 
@@ -20,6 +28,25 @@ OLLAMA_DEFAULT_KEEP_ALIVE = "24h"
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", OLLAMA_DEFAULT_HOST)
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", OLLAMA_DEFAULT_MODEL)
 OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", OLLAMA_DEFAULT_EMBEDDING_MODEL)
+
+# ============================================================================
+# AWS BEDROCK CONFIGURATION
+# ============================================================================
+
+BEDROCK_DEFAULT_REGION = "us-east-1"
+# Llama 3.2 models require cross-region inference profile (us. prefix)
+BEDROCK_DEFAULT_MODEL = "us.meta.llama3-2-3b-instruct-v1:0"
+BEDROCK_DEFAULT_EMBEDDING_MODEL = "amazon.titan-embed-text-v2:0"
+
+# Get from environment or use defaults
+BEDROCK_REGION = os.getenv("AWS_REGION", BEDROCK_DEFAULT_REGION)
+BEDROCK_MODEL = os.getenv("BEDROCK_MODEL", BEDROCK_DEFAULT_MODEL)
+BEDROCK_EMBEDDING_MODEL = os.getenv("BEDROCK_EMBEDDING_MODEL", BEDROCK_DEFAULT_EMBEDDING_MODEL)
+
+# AWS credentials (optional - will use IAM role if on EC2)
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+AWS_SESSION_TOKEN = os.getenv("AWS_SESSION_TOKEN")  # Required for temporary credentials
 
 # ============================================================================
 # CHROMADB CONFIGURATION
@@ -103,9 +130,9 @@ FIRST_TOKEN_TIME_COLD = "10-15 seconds"
 FIRST_TOKEN_TIME_WARM = "5-10 seconds"
 SUBSEQUENT_TOKEN_TIME = "50-200ms"
 
-# Model memory usage (for llama2:7b-chat-q4_0)
-MODEL_MEMORY_USAGE = "~4.5GB RAM"
-MODEL_DISK_SIZE = "~3.8GB"
+# Model memory usage (for qwen2.5:0.5b)
+MODEL_MEMORY_USAGE = "~400MB RAM"
+MODEL_DISK_SIZE = "~300MB"
 
 # ============================================================================
 # API INFORMATION

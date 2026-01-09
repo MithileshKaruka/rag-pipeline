@@ -16,7 +16,9 @@ function App() {
   const [sources, setSources] = useState([]);
   const [queryLoading, setQueryLoading] = useState(false);
   const [queryError, setQueryError] = useState('');
-  const [useStreaming, setUseStreaming] = useState(true); // Toggle for streaming mode
+  const [isCached, setIsCached] = useState(false); // Track if response is from cache
+  const [availableModels, setAvailableModels] = useState([]); // Available models from backend
+  const [selectedModel, setSelectedModel] = useState(''); // Selected model (will be set after loading)
 
   // Ingest tab state
   const [ingestMode, setIngestMode] = useState('text'); // 'text' or 'file'
@@ -35,6 +37,7 @@ function App() {
   useEffect(() => {
     checkHealth();
     loadCollections();
+    loadAvailableModels();
   }, []);
 
   /**
@@ -67,6 +70,26 @@ function App() {
   };
 
   /**
+   * Load available models from backend
+   */
+  const loadAvailableModels = async () => {
+    try {
+      const response = await axios.get(API_ENDPOINTS.MODELS);
+      setAvailableModels(response.data);
+      // Set first model as default if not already set
+      if (response.data.length > 0 && !selectedModel) {
+        setSelectedModel(response.data[0].id);
+      }
+    } catch (err) {
+      console.error('Failed to load models:', err);
+      // Fallback to default if API fails
+      if (!selectedModel) {
+        setSelectedModel('ollama-qwen2.5');
+      }
+    }
+  };
+
+  /**
    * Create new collection
    */
   const handleCreateCollection = async () => {
@@ -91,7 +114,7 @@ function App() {
   };
 
   /**
-   * Submit query to RAG backend with streaming support
+   * Submit query to RAG backend (always uses streaming with caching)
    */
   const handleQuery = async (e) => {
     e.preventDefault();
@@ -105,22 +128,10 @@ function App() {
     setQueryError('');
     setAnswer('');
     setSources([]);
+    setIsCached(false);
 
     try {
-      if (useStreaming) {
-        // Use streaming endpoint
-        await handleStreamingQuery();
-      } else {
-        // Use regular endpoint (with caching)
-        const response = await axios.post(API_ENDPOINTS.QUERY, {
-          question: question,
-          collection_name: selectedCollection,
-          n_results: 3
-        });
-
-        setAnswer(response.data.answer);
-        setSources(response.data.sources);
-      }
+      await handleStreamingQuery();
     } catch (err) {
       console.error('Query error:', err);
       setQueryError(
@@ -147,7 +158,8 @@ function App() {
         body: JSON.stringify({
           question: question,
           collection_name: selectedCollection,
-          n_results: 3
+          n_results: 3,
+          model: selectedModel
         })
       });
 
@@ -186,7 +198,11 @@ function App() {
                 const data = JSON.parse(jsonStr);
                 console.log('Parsed data:', data.type);
 
-                if (data.type === 'sources') {
+                if (data.type === 'cache_hit') {
+                  // Set cache status
+                  console.log('Cache hit:', data.data);
+                  setIsCached(data.data);
+                } else if (data.type === 'sources') {
                   // Set sources when received
                   console.log('Received sources:', data.data.sources.length);
                   setSources(data.data.sources);
@@ -318,6 +334,7 @@ function App() {
     setAnswer('');
     setSources([]);
     setQueryError('');
+    setIsCached(false);
   };
 
   // Render health status indicator
@@ -388,6 +405,27 @@ function App() {
               </div>
 
               <div className="form-group">
+                <label htmlFor="model">Model:</label>
+                <select
+                  id="model"
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  className="model-select"
+                  disabled={queryLoading || availableModels.length === 0}
+                >
+                  {availableModels.length > 0 ? (
+                    availableModels.map(model => (
+                      <option key={model.id} value={model.id}>
+                        {model.name} ({model.description}{model.cost !== 'Free (Local)' ? ` - ${model.cost}` : ''})
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">Loading models...</option>
+                  )}
+                </select>
+              </div>
+
+              <div className="form-group">
                 <label htmlFor="question">Your Question:</label>
                 <textarea
                   id="question"
@@ -398,25 +436,6 @@ function App() {
                   rows="4"
                   disabled={queryLoading}
                 />
-              </div>
-
-              <div className="form-group streaming-toggle">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={useStreaming}
-                    onChange={(e) => setUseStreaming(e.target.checked)}
-                    disabled={queryLoading}
-                  />
-                  <span className="streaming-label">
-                    Use Streaming Mode {useStreaming ? '⚡' : '💾'}
-                    <span className="streaming-hint">
-                      {useStreaming
-                        ? '(Real-time tokens, no caching)'
-                        : '(Cached responses, faster for repeated questions)'}
-                    </span>
-                  </span>
-                </label>
               </div>
 
               <div className="button-group">
@@ -442,7 +461,7 @@ function App() {
             {queryLoading && !answer && (
               <div className="loading">
                 <div className="spinner"></div>
-                <p>{useStreaming ? 'Starting stream...' : 'Processing your question...'}</p>
+                <p>Starting stream...</p>
               </div>
             )}
 
@@ -456,12 +475,18 @@ function App() {
             {/* Answer Section */}
             {answer && (
               <div className="answer-section">
-                <h2>Answer:</h2>
+                <div className="answer-header">
+                  <h2>Answer:</h2>
+                  {isCached && (
+                    <span className="cache-badge" title="This response was retrieved from cache">
+                      ⚡ Cached
+                    </span>
+                  )}
+                </div>
                 <div className="answer-content">
                   {answer}
-                  {queryLoading && useStreaming && <span className="streaming-cursor">▊</span>}
+                  {queryLoading && <span className="streaming-cursor">▊</span>}
                 </div>
-                {console.log('RENDERING ANSWER SECTION, answer length:', answer.length)}
 
                 {/* Source Documents */}
                 {sources && sources.length > 0 && (

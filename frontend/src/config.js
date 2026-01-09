@@ -27,6 +27,7 @@ export const API_ENDPOINTS = {
   CREATE_COLLECTION: `${API_BASE_URL}/collections/create`,
   INGEST_TEXT: `${API_BASE_URL}/ingest/text`,
   INGEST_FILE: `${API_BASE_URL}/ingest/file`,
+  MODELS: `${API_BASE_URL}/models`,
 };
 
 console.log('API Configuration:', {

@@ -13,8 +13,11 @@ from constants import (
     API_DESCRIPTION,
     API_VERSION,
     ENVIRONMENT,
+    LLM_PROVIDER,
     OLLAMA_HOST,
     OLLAMA_MODEL,
+    BEDROCK_REGION,
+    BEDROCK_MODEL,
     CHROMA_HOST,
     CHROMA_PORT,
     BACKEND_HOST,
@@ -22,13 +25,13 @@ from constants import (
     CACHE_TTL_SECONDS,
     CACHE_MAX_SIZE
 )
-from config import get_chroma_client, get_ollama_llm, get_allowed_origins
-from model_warmup import warmup_ollama_model
+from config import get_chroma_client, get_llm_client, get_ollama_llm, get_allowed_origins
 from api.health import create_health_router
 # from api.query import create_query_router  # Replaced by enhanced version
 from api.query_enhanced import create_enhanced_query_router
 from api.collections import create_collections_router
 from api.ingest import create_ingest_router
+from api.models_api import create_models_router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -52,30 +55,43 @@ app.add_middleware(
 
 # Initialize clients
 chroma_client = get_chroma_client()
-llm = get_ollama_llm()
+llm = get_llm_client()  # Unified client (Ollama or Bedrock based on LLM_PROVIDER)
 
 # Create and include routers
 health_router = create_health_router(chroma_client, llm)
 query_router = create_enhanced_query_router(chroma_client, llm)  # Using enhanced version with caching & streaming
 collections_router = create_collections_router(chroma_client)
 ingest_router = create_ingest_router(chroma_client)
+models_router = create_models_router()
 
 # Include routers in the app
 app.include_router(health_router, tags=["Health"])
 app.include_router(query_router, prefix="/api", tags=["Query"])
 app.include_router(collections_router, prefix="/api", tags=["Collections"])
 app.include_router(ingest_router, prefix="/api", tags=["Ingestion"])
+app.include_router(models_router, prefix="/api", tags=["Models"])
 
 
-# Startup event to warm up Ollama model
+# Startup logging
 @app.on_event("startup")
-async def warmup_ollama():
-    """
-    Warm up Ollama model on backend startup.
-    This loads the model into memory to reduce first query latency.
-    See model_warmup.py for implementation details.
-    """
-    await warmup_ollama_model(llm)
+async def log_startup_info():
+    """Log startup configuration information"""
+    logger.info("=" * 80)
+    logger.info("RAG BACKEND STARTUP")
+    logger.info("=" * 80)
+    logger.info(f"Environment: {ENVIRONMENT}")
+    logger.info(f"LLM Provider: {LLM_PROVIDER}")
+
+    if LLM_PROVIDER.lower() == "ollama":
+        logger.info(f"Ollama Host: {OLLAMA_HOST}")
+        logger.info(f"Ollama Model: {OLLAMA_MODEL}")
+    elif LLM_PROVIDER.lower() == "bedrock":
+        logger.info(f"Bedrock Region: {BEDROCK_REGION}")
+        logger.info(f"Bedrock Model: {BEDROCK_MODEL}")
+
+    logger.info(f"ChromaDB: {CHROMA_HOST}:{CHROMA_PORT}")
+    logger.info(f"Cache: TTL={CACHE_TTL_SECONDS}s, Max Size={CACHE_MAX_SIZE}")
+    logger.info("=" * 80)
 
 
 # Root endpoint
@@ -97,7 +113,8 @@ async def root():
             "collections": "/api/collections",
             "ingest_text": "/api/ingest/text",
             "ingest_file": "/api/ingest/file",
-            "create_collection": "/api/collections/create"
+            "create_collection": "/api/collections/create",
+            "models": "/api/models"
         },
         "features": {
             "streaming": "Use /api/query/stream for real-time token-by-token responses",

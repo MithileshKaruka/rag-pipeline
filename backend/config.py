@@ -1,5 +1,5 @@
 """
-Configuration and initialization for ChromaDB and Ollama clients
+Configuration and initialization for ChromaDB, Ollama, and AWS Bedrock clients
 """
 
 import logging
@@ -8,13 +8,17 @@ import chromadb
 from langchain_community.llms import Ollama
 
 from constants import (
+    LLM_PROVIDER,
     CHROMA_HOST,
     CHROMA_PORT,
     OLLAMA_HOST,
     OLLAMA_MODEL,
     OLLAMA_DEFAULT_KEEP_ALIVE,
+    BEDROCK_REGION,
+    BEDROCK_MODEL,
     ALLOWED_ORIGINS
 )
+from bedrock_config import get_bedrock_client, test_bedrock_connection
 
 # Load environment variables
 load_dotenv()
@@ -61,6 +65,39 @@ def get_ollama_llm():
     except Exception as e:
         logger.error(f"Failed to initialize Ollama LLM: {e}")
         return None
+
+
+def get_llm_client():
+    """
+    Initialize and return LLM client based on LLM_PROVIDER setting.
+
+    Returns Ollama or Bedrock client depending on configuration.
+
+    Returns:
+        LLM client instance or None if initialization fails
+    """
+    if LLM_PROVIDER.lower() == "bedrock":
+        logger.info("=" * 80)
+        logger.info(f"Initializing AWS Bedrock LLM (Region: {BEDROCK_REGION}, Model: {BEDROCK_MODEL})")
+        logger.info("=" * 80)
+
+        client = get_bedrock_client()
+
+        if client:
+            # Test connection
+            if test_bedrock_connection(client):
+                return client
+            else:
+                logger.error("Bedrock connection test failed")
+                return None
+        else:
+            return None
+    else:
+        # Default to Ollama
+        logger.info("=" * 80)
+        logger.info(f"Initializing Ollama LLM (Host: {OLLAMA_HOST}, Model: {OLLAMA_MODEL})")
+        logger.info("=" * 80)
+        return get_ollama_llm()
 
 
 def get_allowed_origins():

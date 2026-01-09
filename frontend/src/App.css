@@ -581,3 +581,29 @@ body {
     opacity: 0;
   }
 }
+
+/* Cache Badge and Answer Header */
+.answer-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.answer-section h2 {
+  margin: 0;
+}
+
+.cache-badge {
+  background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
+  animation: fadeIn 0.3s;
+}

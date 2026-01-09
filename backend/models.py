@@ -11,6 +11,7 @@ class QueryRequest(BaseModel):
     question: str
     collection_name: str = "knowledge_base"
     n_results: int = 3
+    model: Optional[str] = None  # Model selection: ollama-llama2, bedrock-claude-haiku, etc.
 
 
 class SourceDocument(BaseModel):
