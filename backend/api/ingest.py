@@ -35,7 +35,7 @@ from constants import (
     CHROMA_PORT,
     OLLAMA_HOST,
     OLLAMA_EMBEDDING_MODEL,
-    LLM_PROVIDER,
+    EMBEDDING_PROVIDER,
     BEDROCK_REGION
 )
 from bedrock_config import get_bedrock_client, generate_bedrock_embedding
@@ -228,13 +228,13 @@ def create_ingest_router(chroma_client):
 
         Args:
             documents: List of text documents to embed
-            provider: Provider to use ('ollama' or 'bedrock'). If None, uses LLM_PROVIDER from constants.
+            provider: Provider to use ('ollama' or 'bedrock'). If None, uses EMBEDDING_PROVIDER from constants.
 
         Returns:
             List of embedding vectors
         """
         if provider is None:
-            provider = LLM_PROVIDER.lower()
+            provider = EMBEDDING_PROVIDER.lower()
 
         logger.info(f"Generating embeddings using provider: {provider}")
 
@@ -255,7 +255,7 @@ def create_ingest_router(chroma_client):
             documents: List of document texts
             metadatas: List of metadata dicts for each document
             ids: List of document IDs
-            provider: Embedding provider to use ('ollama' or 'bedrock'). If None, uses LLM_PROVIDER from constants.
+            provider: Embedding provider to use ('ollama' or 'bedrock'). If None, uses EMBEDDING_PROVIDER from constants.
         """
         import asyncio
         from concurrent.futures import ThreadPoolExecutor

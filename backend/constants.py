@@ -12,8 +12,14 @@ import os
 # ============================================================================
 
 # Choose LLM provider: "ollama" or "bedrock"
+# This is used for query/inference operations
 LLM_PROVIDER_DEFAULT = "ollama"
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", LLM_PROVIDER_DEFAULT)
+
+# Choose embedding provider for document ingestion: "ollama" or "bedrock"
+# This is separate from LLM_PROVIDER to allow using different providers for embeddings vs inference
+EMBEDDING_PROVIDER_DEFAULT = "bedrock"
+EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", EMBEDDING_PROVIDER_DEFAULT)
 
 # ============================================================================
 # OLLAMA CONFIGURATION
